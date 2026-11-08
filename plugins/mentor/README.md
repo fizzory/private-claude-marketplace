@@ -644,9 +644,10 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
 
-## Changes in v7.0.0
+## Changes in v6.4.0
 
-**Breaking public workflow change:** `playbook-software-change` and
+Compatibility decision: **minor release by owner decision; two public playbook skills are removed.**
+`playbook-software-change` and
 `playbook-retrospective` leave the public skill list. Mentor exposes seven public
 skills and five planning-owned runtime playbooks: software-change, retrospective,
 investigation, hillclimb and prototype. Invoke planning for these goals; released

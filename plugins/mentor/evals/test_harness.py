@@ -270,6 +270,151 @@ class HarnessTests(unittest.TestCase):
         self.assertEqual(paths, [str(path)])
         self.assertEqual(cwd, self.root)
 
+    def test_successful_simple_shell_reads_require_returned_reference_content(self):
+        fixture = json.loads((HERE / 'fixtures/selection/empty-shell-read.json').read_text())
+        path = self.root / '.claude/skills' / self.case['expected_reads'][1]
+        path.parent.mkdir(parents=True)
+        path.write_text(fixture['reference_content'])
+        for command in fixture['commands']:
+            command = command.format(path=path)
+            events = transcript(self.case, self.root)
+            events[4:6] = [tool('Bash', {'command': command}, 'empty-read'),
+                           dict(type='user', message={'content': [dict(
+                               type='tool_result', tool_use_id='empty-read',
+                               content=fixture['empty_output'], is_error=False)]})]
+            with self.subTest(command=command):
+                result = self.grade(events)
+                self.assertFalse(result['pass'])
+                self.assertIn('missing reads: ' + self.case['expected_reads'][1], result['failures'])
+                codex = dict(type='item.completed', item=dict(
+                    id='empty-read', type='command_execution', command=command,
+                    aggregated_output=fixture['empty_output'], exit_code=0))
+                self.assertEqual(h.observe_transcript(encode([codex]), self.root, 'codex')['reads'], [])
+                for output in (path.read_text(), path.read_text().splitlines()[0]):
+                    paths, _ = h.completed_command_reads(command, self.root, self.root, output, True)
+                    self.assertEqual(paths, [str(path.resolve())] if output == path.read_text() else [])
+
+    def test_final_report_overrides_and_must_agree_with_earlier_marker(self):
+        fixture = json.loads((HERE / 'fixtures/selection/contradictory-final-report.json').read_text())
+        case = next(case for case in CASES if case['id'] == 96)
+        for report in fixture['final_reports'] + [fixture['matching_final_report']]:
+            events = transcript(case, self.root)
+            events[-2]['message']['content'][0]['text'] = fixture['earlier_report']
+            events.insert(-1, dict(type='assistant', message={'content': [dict(type='text', text=report)]}))
+            with self.subTest(report=report):
+                result = self.grade(events, case)
+                self.assertEqual(result['pass'], report == fixture['matching_final_report'], result['failures'])
+                # A marker and contradicting labels within the final message also fail.
+                if report != fixture['matching_final_report'] and report != 'Stopped.':
+                    events[-3]['message']['content'][0]['text'] = fixture['earlier_report'] + '\n' + report
+                    del events[-2]
+                    self.assertFalse(self.grade(events, case)['pass'])
+
+    def test_multiline_history_normalizes_and_must_agree_with_marker(self):
+        case = next(case for case in CASES if case['id'] == 95)
+        histories = ['[\n  2\n]', '\n  - 2',
+                     '\n  - Step 1 does not need re-checking.\n  - Step 2 needs re-checking.',
+                     '\n  - Step 1 is marked done, so its history is backed and does not need re-grading.\n'
+                     '  - Step 2 has no mark. Its PASS claim needs re-checking.']
+        for history in histories:
+            report = 'Delivery owner: retrospective\nHistory to re-check: ' + history
+            for marked_history in (None, [2], []):
+                events = transcript(case, self.root)
+                if marked_history is None:
+                    events[-2]['message']['content'][0]['text'] = report
+                else:
+                    events[-2]['message']['content'][0]['text'] = 'EVAL_SELECTION ' + json.dumps(
+                        dict(delivery_owner='retrospective', history_to_recheck=marked_history))
+                    events.insert(-1, dict(type='assistant', message={'content': [dict(type='text', text=report)]}))
+                with self.subTest(history=history, marker=marked_history):
+                    result = self.grade(events, case)
+                    self.assertEqual(result['pass'], marked_history != [], result['failures'])
+                    self.assertEqual(result['evidence']['selection']['history_to_recheck'], [2])
+                    if marked_history == []:
+                        self.assertIn('contradictory selection reports: history_to_recheck', result['failures'])
+
+    def test_empty_history_words_normalize_and_must_agree_with_marker(self):
+        case = next(case for case in CASES if case['id'] == 96)
+        for history in ('nothing', 'none', 'no steps', 'No steps.',
+                        "nothing. This isn't a resumed plan, so there are no earlier claims to verify."):
+            report = 'Delivery owner: software-change\nHistory to re-check: ' + history
+            for marked_history in (None, [], [2]):
+                events = transcript(case, self.root)
+                if marked_history is None:
+                    events[-2]['message']['content'][0]['text'] = report
+                else:
+                    events[-2]['message']['content'][0]['text'] = 'EVAL_SELECTION ' + json.dumps(
+                        dict(delivery_owner='software-change', history_to_recheck=marked_history))
+                    events.insert(-1, dict(type='assistant', message={'content': [dict(type='text', text=report)]}))
+                with self.subTest(history=history, marker=marked_history):
+                    result = self.grade(events, case)
+                    self.assertEqual(result['pass'], marked_history != [2], result['failures'])
+                    self.assertEqual(result['evidence']['selection']['history_to_recheck'], [])
+                    if marked_history == [2]:
+                        self.assertIn('contradictory selection reports: history_to_recheck', result['failures'])
+
+    def test_owner_prose_normalizes_support_but_rejects_competing_owners(self):
+        case = next(case for case in CASES if case['id'] == 93)
+        owners = [('software-change (hillclimb supplies attempts)', True),
+                  ('the hillclimb playbook says that when it is combined with software-change, '
+                   'software-change is the only delivery owner', True),
+                  ('the software-change playbook alone', True),
+                  ('software-change and hillclimb', False),
+                  ('software-change (or hillclimb)', False),
+                  ('software-change is the only delivery owner and hillclimb is the only delivery owner', False),
+                  ('hillclimb (software-change supplies attempts)', False)]
+        for owner, accepted in owners:
+            report = 'Delivery owner: ' + owner + '\nHistory to re-check: []'
+            for mode in ('prose', 'earlier-marker', 'same-message-marker'):
+                events = transcript(case, self.root)
+                if mode == 'prose':
+                    events[-2]['message']['content'][0]['text'] = report
+                elif mode == 'earlier-marker':
+                    events.insert(-1, dict(type='assistant', message={'content': [dict(type='text', text=report)]}))
+                else:
+                    events[-2]['message']['content'][0]['text'] += '\n' + report
+                with self.subTest(owner=owner, mode=mode):
+                    result = self.grade(events, case)
+                    self.assertEqual(result['pass'], accepted, result['failures'])
+                    if accepted:
+                        self.assertEqual(result['evidence']['selection']['delivery_owner'], 'software-change')
+
+    def test_shell_work_and_added_or_changed_unlisted_project_files_breach_selection(self):
+        fixture = json.loads((HERE / 'fixtures/selection/shell-boundary-mutations.json').read_text())
+        for command in fixture['commands']:
+            events = transcript(self.case, self.root)
+            events[-2:-2] = [tool('Bash', {'command': command}, 'work'),
+                            dict(type='user', message={'content': [dict(
+                                type='tool_result', tool_use_id='work', content='', is_error=False)]})]
+            with self.subTest(command=command):
+                result = self.grade(events)
+                self.assertFalse(result['pass'])
+                self.assertIn('continued beyond selection boundary', result['failures'])
+                evidence = h.observe_transcript(encode(transcript(self.case, self.root)), self.root, 'claude')
+                evidence['tool_calls'].append(dict(name='command_execution', input=dict(command=command)))
+                self.assertFalse(h.score_case(self.case, evidence)['pass'])
+
+        class Child:
+            returncode = 0
+            def wait(self, timeout=None):
+                return 0
+
+        for relative in (fixture['added_file'], fixture['changed_file']):
+            with self.subTest(file=relative):
+                root = self.root / relative.removesuffix('.txt')
+                root.mkdir()
+                (root / fixture['changed_file']).write_text('original project content')
+
+                def fake_child(cmd, stdout, stderr, cwd, env):
+                    stdout.write(encode(transcript(self.case, root)))
+                    (root / relative).write_text('implemented outside selection')
+                    return Child()
+
+                with patch.object(h.subprocess, 'Popen', side_effect=fake_child):
+                    result = h.run_query(root, self.case, '', 'claude', self.root)
+                self.assertFalse(result['pass'])
+                self.assertEqual(result['evidence']['fixture_changes'], [relative])
+
     def test_denied_unfinished_and_unproven_shell_commands_do_not_credit_compound_reads(self):
         path = self.root / 'plan.md'
         path.write_text('Actual saved plan contents.\n')
@@ -450,7 +595,9 @@ class HarnessTests(unittest.TestCase):
         events = []
         for i, relative in enumerate(['planning/SKILL.md'] + self.case['expected_reads']):
             path = self.root / '.agents/skills' / relative
-            events.append(dict(type='item.completed', item=dict(id=str(i), type='command_execution', command=f'cat {path}', exit_code=0)))
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text('The complete contents of ' + relative + '\n')
+            events.append(dict(type='item.completed', item=dict(id=str(i), type='command_execution', command=f'cat {path}', aggregated_output=path.read_text(), exit_code=0)))
         events.extend([dict(type='item.completed', item=dict(type='agent_message', text='EVAL_SELECTION {"delivery_owner":"software-change","history_to_recheck":[]}')), dict(type='turn.completed')])
         result = h.score_case(self.case, h.observe_transcript(encode(events), self.root, 'codex'))
         self.assertTrue(result['pass'], result['failures'])

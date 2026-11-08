@@ -1,0 +1,14 @@
+{
+  "description": "Selection permits read-only discovery, and staged project comparisons include unlisted files.",
+  "commands": [
+    "touch implemented-outside-selection.txt",
+    "cat .claude/skills/planning/SKILL.md > implemented-outside-selection.txt",
+    "sed -i '' '1d' existing-project-file.txt",
+    "sed -n 'w implemented-outside-selection.txt' existing-project-file.txt",
+    "find . -exec touch implemented-outside-selection.txt \\;",
+    "env touch implemented-outside-selection.txt",
+    "bash -lc 'touch implemented-outside-selection.txt'"
+  ],
+  "added_file": "implemented-outside-selection.txt",
+  "changed_file": "existing-project-file.txt"
+}

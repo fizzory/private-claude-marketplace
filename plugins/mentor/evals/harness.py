@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Cross-host routing and playbook-read evals; the positional CLI always runs live."""
 import json
+import hashlib
 import os
 import re
 import shlex
@@ -169,11 +170,11 @@ def read_path(path, root, host):
             return str(absolute)
 
 
-def command_words(command):
+def command_words(command, allow_variables=False):
     """Tokenize literal commands once, retaining child-shell cwd isolation."""
     wrapped = False
     while True:
-        if "$" in command or "`" in command:
+        if "`" in command or "$(" in command or ("$" in command and not allow_variables):
             return None, wrapped
         try:
             lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()\n")
@@ -204,7 +205,7 @@ def command_reads(command):
 
 
 def completed_command_reads(command, cwd, root, output, success):
-    """Credit compound shell reads only when the returned output contains the file."""
+    """Credit shell reads only when the returned output contains the file."""
     words, wrapped = command_words(command)
     paths, final_cwd = completed_word_reads(words, cwd, root, output, success)
     return paths, cwd if wrapped else final_cwd
@@ -216,9 +217,6 @@ def completed_word_reads(words, cwd, root, output, success):
         return Path(path).resolve() if Path(path).is_absolute() else (
             (cwd / path).resolve() if cwd is not None else None)
 
-    simple = literal_command_reads(words)
-    if simple and success:
-        return [str(path) for name in simple if (path := absolute(name)) is not None], cwd
     # This is a conservative literal-command observer, not a shell evaluator.
     if words is None:
         return [], None
@@ -255,6 +253,50 @@ def completed_word_reads(words, cwd, root, output, success):
     return paths, cwd if success or paths else None
 
 
+def prose_delivery_owner(value):
+    """Normalize an owner assertion without counting its supporting playbook."""
+    names = "(?:" + "|".join(re.escape(name) for name in
+                              sorted(DELIVERY_OWNERS, key=len, reverse=True)) + ")"
+    value = " ".join(value.casefold().split())
+    # These clauses describe support, rather than assigning a second owner.
+    value = re.sub(rf"\s*\({names} supplies attempts\)", "", value)
+    value = re.sub(rf"^the {names} playbook says that when it is combined with {names},\s*",
+                   "", value)
+    value = re.sub(r"\s+is the (?:only|single) delivery owner$", "", value)
+    value = re.sub(r"^the\s+|\s+playbook(?:\s+alone)?$|\s+alone$", "", value)
+    named = {DELIVERY_OWNERS[name] for name in
+             re.findall(rf"(?<![\w-]){names}(?![\w-])", value)}
+    return named.pop() if len(named) == 1 else None
+
+
+def prose_history(value):
+    """Read JSON or explicit step bullets; unknown history remains an error."""
+    first = value.split("\n", 1)[0].split(". ", 1)[0].rstrip(".").strip()
+    if first.casefold() in ("none", "nothing", "no steps"):
+        return []
+    if value.startswith("["):
+        return json.loads(value.split(". ", 1)[0].rstrip("."))
+    bullets = re.split(r"(?m)^\s*[-+]\s+", value)
+    if bullets[0].strip() or len(bullets) == 1:
+        raise ValueError("unrecognized history")
+    history, seen = [], set()
+    for bullet in bullets[1:]:
+        match = re.fullmatch(r"(?:step\s+)?(\d+)\b(.*)", bullet.strip(), re.I | re.S)
+        if not match or int(match[1]) in seen:
+            raise ValueError("ambiguous history bullet")
+        step, detail = int(match[1]), match[2].strip()
+        seen.add(step)
+        backed_pattern = r"\bdoes not need re-(?:checking|grading)\b"
+        backed = re.search(backed_pattern, detail, re.I)
+        recheck = re.search(r"\bneeds? re-check(?:ing)?\b",
+                            re.sub(backed_pattern, "", detail, flags=re.I), re.I)
+        if not detail or (recheck and not backed):
+            history.append(step)
+        elif not backed or recheck:
+            raise ValueError("ambiguous history bullet")
+    return history
+
+
 def selection_report(text_blocks, final_text, errors):
     """Parse reports, never infer the owner or history from selected skills/reads."""
     markers = []
@@ -267,42 +309,137 @@ def selection_report(text_blocks, final_text, errors):
                 markers.append(report)
             except json.JSONDecodeError:
                 errors.append("malformed selection boundary JSON")
-    if marker_seen:
-        if len(markers) > 1:
-            errors.append("multiple selection boundaries")
-        return (markers[0] if len(markers) == 1 else None), "marker"
+    if len(markers) > 1:
+        errors.append("multiple selection boundaries")
 
     # A format slip must not erase an explicit report like the recorded #85.
     # Only labeled assertions in the final assistant message qualify; mentions,
     # earlier commentary, user text and tool output cannot supply an owner.
     plain = re.sub(r"[*`]", "", final_text)
 
-    def statements(labels):
+    def statements(labels, multiline=False):
         # Match labels separately so a second assertion on the same line cannot
         # hide behind the first assertion's explanatory prose.
         matches = re.finditer(rf"(?im)(?:^|\.\s+)\s*(?:-\s*)?(?:{labels})\s*:[ \t]*", plain)
-        return [plain[m.end():].split("\n", 1)[0].split(". ", 1)[0].rstrip(".").strip()
-                for m in matches]
+        values = []
+        for match in matches:
+            value = plain[match.end():]
+            if multiline:
+                value = re.split(r"\n\s*\n|\bEVAL_SELECTION\b", value, maxsplit=1)[0]
+            else:
+                value = value.split("\n", 1)[0].split(". ", 1)[0].rstrip(".")
+            values.append(value.strip())
+        return values
 
     owners = statements(r"delivery[ _]owner|who delivers(?: it)?")
-    if not owners:
-        return None, None
-    if len(owners) != 1:
+    report = {}
+    if len(owners) > 1:
         errors.append("multiple delivery owner statements")
-        return None, "final-text"
-    owner = re.sub(r"^the\s+|\s+playbook(?:\s+alone)?$|\s+alone$", "", owners[0], flags=re.I)
-    report = {"delivery_owner": owner}
-    histories = statements(r"history_to_recheck|history to re-check")
+    elif owners:
+        report["delivery_owner"] = prose_delivery_owner(owners[0])
+        if report["delivery_owner"] is None:
+            errors.append("wrong or multiple delivery owners: " + owners[0])
+    histories = statements(r"history_to_recheck|history to re-check", multiline=True)
     if len(histories) > 1:
         errors.append("multiple history re-check statements")
     elif histories:
-        history = histories[0]
         try:
-            report["history_to_recheck"] = [] if history.casefold() == "none" else json.loads(history)
-        except json.JSONDecodeError:
+            report["history_to_recheck"] = prose_history(histories[0])
+        except ValueError:
             errors.append("malformed history re-check statement")
+    if marker_seen:
+        marker = markers[0] if len(markers) == 1 else None
+        if isinstance(marker, dict):
+            for key, value in report.items():
+                marked = marker.get(key)
+                if key == "delivery_owner":
+                    marked = (DELIVERY_OWNERS.get(" ".join(marked.casefold().split()))
+                              if isinstance(marked, str) else None)
+                if value != marked:
+                    errors.append("contradictory selection reports: " + key)
+        # An earlier marker cannot replace a missing or different final report.
+        if re.search(r"\bEVAL_SELECTION\b", final_text):
+            return marker, "marker"
     # An absent history field stays absent: cases that check it must still fail.
-    return report, "final-text"
+    return (report, "final-text") if owners else (None, None)
+
+
+def selection_read_command(command):
+    """Allow only selection reads/discovery; unknown shell behavior fails closed."""
+    words, _ = command_words(command, allow_variables=True)
+    if not words:
+        return False
+    segments = [[]]
+    i = 0
+    while i < len(words):
+        word = words[i]
+        # Suppressing output or copying stderr to stdout cannot write a file.
+        if word in (">", ">&"):
+            if segments[-1] and segments[-1][-1] in ("1", "2"):
+                segments[-1].pop()
+            if i + 1 == len(words) or words[i + 1] not in (
+                    ("/dev/null",) if word == ">" else ("1", "2")):
+                return False
+            i += 2
+            continue
+        if word in (";", "&&", "|", "\n"):
+            if not segments[-1]:
+                return False
+            segments.append([])
+        elif word and all(char in ";&|<>()\n" for char in word):
+            return False
+        else:
+            segments[-1].append(word)
+        i += 1
+    for segment in segments:
+        if not segment:
+            return False
+        name, *args = segment
+        if name == "echo":
+            continue  # Variable interpolation is allowed only as printed text.
+        if any("$" in word for word in segment):
+            return False
+        if name == "cd":
+            if len(args) != 1 or args[0].startswith("-"):
+                return False
+        elif name in ("cat", "head", "tail", "ls", "pwd"):
+            if name == "tail" and any(arg in ("-f", "-F") or arg.startswith("--follow") for arg in args):
+                return False
+        elif name == "sed":
+            # Print-only scripts; -i, w, e and substitution commands can mutate.
+            script = args[1:] if args[:1] == ["-n"] else args
+            if script[:1] == ["-e"]:
+                script = script[1:]
+            if not script or not re.fullmatch(r"(?:\d+|\$)(?:,(?:\d+|\$))?p", script[0]):
+                return False
+            if any(arg.startswith("-") for arg in script[1:]):
+                return False
+        elif name == "find":
+            allowed = {"-type", "-name", "-iname", "-path", "-ipath", "-maxdepth",
+                       "-mindepth", "-not", "!", "-a", "-o", "-print", "-print0"}
+            if any(arg.startswith("-") and arg not in allowed for arg in args):
+                return False
+        elif name in ("grep", "rg"):
+            if any(arg.startswith("-") and not re.fullmatch(r"-[ivEnHrln0]+", arg) for arg in args):
+                return False
+        elif name == "env":
+            if args:  # env COMMAND executes COMMAND.
+                return False
+        else:
+            return False
+    return True
+
+
+def project_snapshot(root):
+    """Record every staged file, including skills and non-fixture project files."""
+    snapshot = {}
+    for path in root.rglob("*"):
+        relative = str(path.relative_to(root))
+        if path.is_symlink():
+            snapshot[relative] = ("symlink", os.readlink(path))
+        elif path.is_file():
+            snapshot[relative] = ("file", hashlib.sha256(path.read_bytes()).hexdigest())
+    return snapshot
 
 
 def observe_transcript(transcript, root, host):
@@ -478,7 +615,9 @@ def score_case(case, evidence, returncode=0, timed_out=False):
             if "expected_history_to_recheck" in case and selection.get("history_to_recheck") != case["expected_history_to_recheck"]:
                 reasons.append("supported history marked for re-check")
         # The selection boundary forbids executing work, not just claiming to stop.
-        if any(call["name"] in ("Write", "Edit", "Agent", "Task", "TodoWrite")
+        if any(call["name"] in ("Write", "Edit", "Agent", "Task", "TodoWrite") or
+               (call["name"] in ("Bash", "command_execution") and
+                not selection_read_command(call["input"].get("command", "")))
                for call in evidence["tool_calls"]):
             reasons.append("continued beyond selection boundary")
     return {"got": got, "actual_picks": list(picks), "pass": not reasons, "failures": reasons,
@@ -487,6 +626,7 @@ def score_case(case, evidence, returncode=0, timed_out=False):
 
 def run_query(root, case, model, host, evidence_dir, timeout=150):
     cmd, env = child_command(case["query"], model, host, "expected_reads" in case)
+    before = project_snapshot(root)
     t0 = time.monotonic()
     timed_out = False
     with (evidence_dir / "transcript.jsonl").open("w") as output, (evidence_dir / "stderr.txt").open("w") as errors:
@@ -504,8 +644,9 @@ def run_query(root, case, model, host, evidence_dir, timeout=150):
             code = 127
     transcript = (evidence_dir / "transcript.jsonl").read_text()
     evidence = observe_transcript(transcript, root, host)
-    evidence["fixture_changes"] = [relative for relative, content in case.get("fixture_files", {}).items()
-                                   if not (root / relative).is_file() or (root / relative).read_text() != content]
+    after = project_snapshot(root)
+    evidence["fixture_changes"] = sorted(relative for relative in before.keys() | after.keys()
+                                         if before.get(relative) != after.get(relative))
     result = score_case(case, evidence, code, timed_out)
     result.update(secs=round(time.monotonic() - t0, 1), exit_code=code,
                   transcript=str(evidence_dir / "transcript.jsonl"), stderr=str(evidence_dir / "stderr.txt"),

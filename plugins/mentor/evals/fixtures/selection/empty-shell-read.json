@@ -1,0 +1,11 @@
+{
+  "description": "Successful shell reads must return the reference content before receiving read credit.",
+  "commands": [
+    "cat {path}",
+    "sed -n '999999p' {path}",
+    "head -n 0 {path}",
+    "tail -n 0 {path}"
+  ],
+  "empty_output": "",
+  "reference_content": "A distinctive selection reference.\nIts full content must be returned.\n"
+}

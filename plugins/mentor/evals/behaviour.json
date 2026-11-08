@@ -1,6 +1,6 @@
 {
   "eval_name": "mentor-v6.0.0-run-behaviour",
-  "note": "Behaviour checks for a mentor plan run (AGENTS.md → Mentor core concept). Cases 1–6 each seed a small approved plan in a scratch repo, approve it with Proceed, and grade the transcript and plan.md. Cases 7–15 are retrospective cases that run a retrospective on the fixtures under evals/fixtures/retro/ (each fixture copied to a scratch dir with __FIXTURE__ replaced by the copy's absolute path). Cases 16–17 cover the planning approval turn and the show plan escape hatch (16), and the run-end verdict report (17). Graded by a reader against the assertions; not run by harness.py, which scores routing only.",
+  "note": "Behaviour checks for a mentor plan run (AGENTS.md → Mentor core concept). Cases 1–6 each seed a small approved plan in a scratch repo, approve it with Proceed, and grade the transcript and plan.md. Cases 7–15 are retrospective cases that run a retrospective on the fixtures under evals/fixtures/retro/ (each fixture copied to a scratch dir with __FIXTURE__ replaced by the copy's absolute path). Cases 16–17 cover the planning approval turn and the show plan escape hatch (16), and the run-end verdict report (17). Cases 1–17 are graded by a reader against the assertions, not executed by harness.py. Cases 18–31 mirror evals.json 83–96 and are executed by harness.py through their routing_case_id; cases 1–17 remain reader-graded, not executed by that harness.",
   "evals": [
     {
       "id": 1,
@@ -36,7 +36,9 @@
       "prompt": "Approved 2-step plan on a host with subagents.",
       "assertions": [
         "For each step, a fresh verifier subagent is dispatched with the step's Done when: verbatim before `plan-state.sh tick`",
-        "Each tick follows a `PASS` row citing the verdict file step-N-verify.md",
+        "The caller waits for each verdict and saves the returned block verbatim to verdicts/step-N.md with Grade, Grading, Author family and Verifier family headers; the latest grade overwrites that file",
+        "Each tick follows save → append a row with decision `Step N graded`, evidence `verdicts/step-N.md · <grading> · <author>/<verifier> family`, result `PASS` → record-write → tick",
+        "The released path step-N-verify.md stays readable only when verdicts/step-N.md is missing; no reader uses -rK files",
         "No step is ticked by the builder's own judgment"
       ]
     },
@@ -136,7 +138,7 @@
     {
       "id": 15,
       "name": "S8-invitation-after-implemented-not-after-retro",
-      "prompt": "A non-retro plan reaches `implemented`; separately a `playbook-retrospective` plan reaches `implemented`.",
+      "prompt": "A non-retro plan reaches `implemented`; separately a plan using `skills/planning/references/playbooks/retrospective.md` reaches `implemented`.",
       "assertions": [
         "The non-retro plan's final report shows exactly one non-blocking /mentor:retro invitation line",
         "The retro plan's final report shows no invitation line"
@@ -164,6 +166,163 @@
         "The full ## Done review and the decision log grouped by use case, with `review?: needed` rows first within each group, are written into .mentor/plans/verdict-demo/plan.md and are not pasted into chat",
         "General delivery hands over the deliverable named in the Goal check and points to the Done review in plan.md; no PR is created",
         "The retrospective invitation, if offered, is one non-blocking line after the run report"
+      ]
+    },
+    {
+      "id": 18,
+      "name": "playbook-selection-83",
+      "routing_case_id": 83,
+      "prompt": "Plan fixing the payment module so refund rejects a negative amount, then carry it through to done. This is a normal code fix, with no performance target.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/software-change.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'software-change'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 19,
+      "name": "playbook-selection-84",
+      "routing_case_id": 84,
+      "prompt": "Plan writing an original twelve-line welcome poem for our internal newsletter. The poem itself is the whole deliverable; no research or code changes.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'general'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 20,
+      "name": "playbook-selection-85",
+      "routing_case_id": 85,
+      "prompt": "Plan a retrospective of this finished agent session and turn its repeated manual steps into local reusable skills; report the remaining proposals.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/retrospective.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'retrospective'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 21,
+      "name": "playbook-selection-86",
+      "routing_case_id": 86,
+      "prompt": "Plan adding retry with backoff to src/ingestion/pipeline.py and run it until done. This is a forward change to the uploader.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/software-change.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'software-change'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 22,
+      "name": "playbook-selection-87",
+      "routing_case_id": 87,
+      "prompt": "Plan a read-only investigation of how src/auth/flow.ts rotates refresh tokens. Deliver a cited explanation with measured, inferred and unverified claims distinguished, without changing source.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/investigation.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'investigation'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 23,
+      "name": "playbook-selection-88",
+      "routing_case_id": 88,
+      "prompt": "Why do refresh tokens rotate? Just explain the idea briefly; I am not asking for a plan or an investigation.",
+      "assertions": [
+        "Select none; completed reads include exactly the expected index/playbook paths: none.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'none'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 24,
+      "name": "playbook-selection-89",
+      "routing_case_id": 89,
+      "prompt": "Plan improving a local plain-text instruction sheet from 90 seconds to under 60 seconds median task time, with at least 4 measured attempts and a cap of 8. Deliver the final sheet, timing comparison and attempt log. No software changes or publication.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/hillclimb.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from ['hillclimb', 'general']; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 25,
+      "name": "playbook-selection-90",
+      "routing_case_id": 90,
+      "prompt": "Plan fixing the auth flow so a revoked refresh token is rejected. It is a correctness bug, with no metric-improvement goal.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/software-change.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'software-change'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 26,
+      "name": "playbook-selection-91",
+      "routing_case_id": 91,
+      "prompt": "Plan building two throwaway checkout layout variants and observing the same checkout tasks on each. Deliver the variants and comparison evidence so I can pick the density later. The prototype itself is the goal, not a production feature.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/prototype.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'prototype'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 27,
+      "name": "playbook-selection-92",
+      "routing_case_id": 92,
+      "prompt": "Mock up the checkout redesign as a local review page so I can see the screens and edge cases.",
+      "assertions": [
+        "Select previewing; completed reads include exactly the expected index/playbook paths: none.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'none'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 28,
+      "name": "playbook-selection-93",
+      "routing_case_id": 93,
+      "prompt": "Plan reducing the ingestion pipeline p95 runtime from 100 seconds to below 60 by changing its Python code, with a frozen benchmark, at least 4 measured attempts and an 8-attempt cap. Deliver the code change and measured comparison.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/hillclimb.md, planning/references/playbooks/software-change.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'software-change'; stop at selection before approval, implementation or delegation."
+      ]
+    },
+    {
+      "id": 29,
+      "name": "playbook-selection-94",
+      "routing_case_id": 94,
+      "prompt": "Resume the already approved plan at .mentor/plans/eval-resume/plan.md, retaining its saved selection.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/software-change.md, .mentor/plans/eval-resume/plan.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'software-change'; stop at selection before approval, implementation or delegation.",
+        "Resolve the released alias through the current index and leave every saved fixture byte-identical."
+      ]
+    },
+    {
+      "id": 30,
+      "name": "playbook-selection-95",
+      "routing_case_id": 95,
+      "prompt": "Resume the already approved plan at .mentor/plans/eval-resume/plan.md, retaining its saved selection.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/retrospective.md, .mentor/plans/eval-resume/plan.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'retrospective'; stop at selection before approval, implementation or delegation.",
+        "Resolve the released alias through the current index and leave every saved fixture byte-identical."
+      ]
+    },
+    {
+      "id": 31,
+      "name": "playbook-selection-96",
+      "routing_case_id": 96,
+      "prompt": "Resume the already approved .mentor/plans/eval-resume/plan.md. The previous session said steps 1 and 2 passed; inspect the saved history before deciding which inherited claims need re-checking.",
+      "assertions": [
+        "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/software-change.md, planning/references/principles.md, .mentor/plans/eval-resume/plan.md, .mentor/plans/eval-resume/verdicts/step-2.md.",
+        "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
+        "Record exactly one delivery owner from 'software-change'; stop at selection before approval, implementation or delegation.",
+        "Read the saved plan, principles and verdict; history_to_recheck is empty because the historical tick and saved verdict support both prior claims. Leave the saved history unchanged."
       ]
     }
   ]

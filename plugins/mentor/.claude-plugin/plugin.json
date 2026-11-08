@@ -1,7 +1,7 @@
 {
   "name": "mentor",
   "description": "Plan-first agent workflow: approve a plan once, then mentor runs it to a verified done-check, pausing only for always-pause actions and logging every decision for review.",
-  "version": "6.3.0",
+  "version": "6.4.0",
   "author": {
     "name": "NTBX"
   }

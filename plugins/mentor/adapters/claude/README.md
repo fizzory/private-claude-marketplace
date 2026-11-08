@@ -5,15 +5,59 @@ Claude Code discovers the command facades in `commands/` and the lifecycle hooks
 `plan-continue.sh` Stop hook that keeps an approved run going until a terminal state,
 plan-file tracking (the per-prompt plan pointer in `context-gate.sh`, `plan-reattach.sh`
 SessionStart re-attachment, and automatic `plan_sha256` recording on Write/Edit in
-`plan-open.sh`), foreground verifier subagents, and hosted Artifact publishing on top
+`plan-open.sh`), verifier subagents, and hosted Artifact publishing on top
 of the portable skills and `.mentor/` state contract.
+
+Verifier scheduling, model, and effort come from the host's verifier role. The caller
+waits for the returned verdict, then saves its block verbatim under the plan's
+`verdicts/` directory per `skills/planning/references/verifier-contract.md`; before a
+step tick, it saves `verdicts/step-N.md`, appends the PASS row, and records the plan write.
+Prefer another model family (SHOULD), recording the actual author and verifier families
+or `unknown`; retain the labelled `self-graded` fallback when delegation is unavailable.
+
+## Shared run contract
+
+Resolve every needed role through planning's
+[Role resolution](../../skills/planning/SKILL.md#decision-maker), using an explicit
+session mapping first and otherwise an agent's described purpose. Every brief opens
+with the plan-level `Goal:`. The full run directive lives in
+[After Proceed](../../skills/planning/SKILL.md#implement).
+
+The step order is save `verdicts/step-N.md` → PASS row → `record-write` → tick.
+A new tick makes a point-in-time read of the latest saved PASS. Released verdict
+paths and optional headers remain readable, and historical ticks remain idempotent;
+see the [verifier contract](../../skills/planning/references/verifier-contract.md).
+For output reuse, follow the verifier contract's
+[Evidence reuse](../../skills/planning/references/verifier-contract.md#evidence-reuse) section.
+
+Read [principles](../../skills/planning/references/principles.md) at planning's named
+decision points and selected playbooks' optional Run rules before starting or
+resuming. Rationale is editing-only, read when editing or considering an override.
+Without subagents, the same scope and evidence run serially with labelled self-grading.
 
 The skills remain the source of workflow behavior. A Claude command should route to
 its matching skill instead of duplicating that behavior here.
 
+## Planning playbooks
+
+Planning reads the [playbook index](../../skills/planning/references/playbooks.md)
+and the references matching the requested plan deliverable:
+[software-change](../../skills/planning/references/playbooks/software-change.md),
+[retrospective](../../skills/planning/references/playbooks/retrospective.md),
+[investigation](../../skills/planning/references/playbooks/investigation.md),
+[hillclimb](../../skills/planning/references/playbooks/hillclimb.md) and
+[prototype](../../skills/planning/references/playbooks/prototype.md).
+Each fills the five required overlay slots; investigation, hillclimb and prototype
+also supply optional Run rules. Each keeps its own Host portability fallback.
+These are references within planning; Mentor still exposes
+seven public skills and needs no new playbook command facade. Host tools provide
+the read-only research, measurements or variant observations; unavailable tools
+leave an explicit evidence gap under the selected reference's contract.
+
 ## Retrospective evidence
 
-Host-specific lookup details for `playbook-retrospective`. The skill prose stays
+Host-specific lookup details for planning's
+[retrospective reference](../../skills/planning/references/playbooks/retrospective.md). The playbook prose stays
 host-neutral; these are the Claude Code facts the evidence graph relies on.
 
 ### Identity

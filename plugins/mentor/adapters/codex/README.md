@@ -10,15 +10,52 @@ When a host-native UI action is unavailable, use the portable fallback declared 
 the skill: ordinary conversation for questions, the current task for serial work,
 and local HTML/Markdown files for review pages.
 
-**The run loop without hooks.** Codex has no Stop hook here, so planning's
-run-until-done loop is a prose rule: after the one approval, keep working through the
-steps in the current task until a terminal state (done, paused on an always-pause item or a stop word,
-or failed). Without subagents each step is graded serially in the main thread, and every
-such PASS row is labelled `self-graded` — never presented as independent.
+**The run loop without hooks.** Follow planning → **After Proceed** in
+[`skills/planning/SKILL.md`](../../skills/planning/SKILL.md#implement), including its
+**Hosts without a Stop hook or subagents** fallback.
+
+## Shared run contract
+
+Resolve needed roles through planning's
+[Role resolution](../../skills/planning/SKILL.md#decision-maker): explicit session
+mapping first, then an installed agent by described purpose, then a general-purpose
+agent or serial work when delegation is unavailable. Every brief opens with the
+plan-level `Goal:`; scheduling and model choice belong to the host role.
+
+The step order is save `verdicts/step-N.md` → PASS row → `record-write` → tick.
+A new tick makes a point-in-time read of the latest saved PASS. A saved
+`Grading: self-graded` PASS can tick when subagents are unavailable; label it and
+retain the same evidence instead of claiming independence. Released verdict paths,
+optional headers and historical tick idempotency remain supported; see the
+[verifier contract](../../skills/planning/references/verifier-contract.md).
+For output reuse, follow the verifier contract's
+[Evidence reuse](../../skills/planning/references/verifier-contract.md#evidence-reuse) section.
+
+Read [principles](../../skills/planning/references/principles.md) at planning's named
+decision points and selected playbooks' optional Run rules before starting or
+resuming. Rationale is editing-only, read when editing or considering an override.
+
+## Planning playbooks
+
+Planning reads the [playbook index](../../skills/planning/references/playbooks.md)
+and the references matching the requested plan deliverable:
+[software-change](../../skills/planning/references/playbooks/software-change.md),
+[retrospective](../../skills/planning/references/playbooks/retrospective.md),
+[investigation](../../skills/planning/references/playbooks/investigation.md),
+[hillclimb](../../skills/planning/references/playbooks/hillclimb.md) and
+[prototype](../../skills/planning/references/playbooks/prototype.md).
+Each fills the five required overlay slots; investigation, hillclimb and prototype
+also supply optional Run rules. Each keeps its own Host portability fallback.
+These are references within planning; Mentor still exposes
+seven public skills and needs no slash-command facade or hooks to read them. Use
+available read-only research, measurement and observation tools, with serial work
+and labelled self-grading when delegation is unavailable; report an evidence gap
+when a required measurement or surface cannot be observed.
 
 ## Retrospective evidence
 
-Host-specific lookup details for `playbook-retrospective`. The skill prose stays
+Host-specific lookup details for planning's
+[retrospective reference](../../skills/planning/references/playbooks/retrospective.md). The playbook prose stays
 host-neutral; these are the Codex facts the evidence graph relies on.
 
 ### Identity

@@ -1,10 +1,8 @@
 {
   "eval_name": "mentor-v6.0.0-cross-host-skill-routing",
-  "note": "Cross-host multi-class routing: every query is scored on WHICH mentor skill fires, not whether one does. 'none' means no mentor skill should be consulted.",
+  "note": "Cross-host multi-class routing: every query is scored on WHICH mentor skill fires, not whether one does. 'none' means no mentor skill should be consulted. Cases 83–96 also score completed reference reads in order and the single delivery owner; real skill trees and references are staged per case. Retrospective cases 77–80 now select planning; other existing routing expectations are unchanged.",
   "skills_in_play": [
     "planning",
-    "playbook-software-change",
-    "playbook-retrospective",
     "grilling",
     "previewing",
     "merging",
@@ -267,25 +265,25 @@
     },
     {
       "id": 77,
-      "expected": "playbook-retrospective",
+      "expected": "planning",
       "tests": "v6.1: core trigger — a retro on this session, repeated steps become skills",
       "query": "run a retro on this session and turn the steps i kept repeating into skills"
     },
     {
       "id": 78,
-      "expected": "playbook-retrospective",
+      "expected": "planning",
       "tests": "v6.1: core trigger — lessons from today's session into skills",
       "query": "what lessons from today's session should become skills?"
     },
     {
       "id": 79,
-      "expected": "playbook-retrospective",
+      "expected": "planning",
       "tests": "v6.1: core trigger — compacted, delegated session; check the subagents' work too",
       "query": "reflect on this session — it compacted three times and the subagents did most of the work, check their work too"
     },
     {
       "id": 80,
-      "expected": "playbook-retrospective",
+      "expected": "planning",
       "tests": "v6.1: plain-wording trigger — a one-session review that proposes skill edits",
       "query": "look back over everything we did in this thread and tell me which bits are worth saving as a reusable skill or a tweak to an existing one"
     },
@@ -300,6 +298,176 @@
       "expected": "planning",
       "tests": "v6.1 NEAR-MISS: a forward code-change goal is planning, not a retrospective of past work",
       "query": "plan adding a retry with backoff to the uploader and run it till it's done"
+    },
+    {
+      "id": 83,
+      "expected": "planning",
+      "tests": "software-change positive: plain code fix; excludes hillclimb, retrospective and prototype",
+      "query": "Plan fixing the payment module so refund rejects a negative amount, then carry it through to done. This is a normal code fix, with no performance target.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/software-change.md"
+      ],
+      "expected_delivery_owner": "software-change"
+    },
+    {
+      "id": 84,
+      "expected": "planning",
+      "tests": "software-change negative: original writing plan uses general delivery and no software overlay",
+      "query": "Plan writing an original twelve-line welcome poem for our internal newsletter. The poem itself is the whole deliverable; no research or code changes.",
+      "expected_reads": [
+        "planning/references/playbooks.md"
+      ],
+      "expected_delivery_owner": "general"
+    },
+    {
+      "id": 85,
+      "expected": "planning",
+      "tests": "retrospective positive: one finished session delivers local lessons, incidental skill edits do not select software-change",
+      "query": "Plan a retrospective of this finished agent session and turn its repeated manual steps into local reusable skills; report the remaining proposals.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/retrospective.md"
+      ],
+      "expected_delivery_owner": "retrospective"
+    },
+    {
+      "id": 86,
+      "expected": "planning",
+      "tests": "retrospective negative: forward repository change loads software-change only",
+      "query": "Plan adding retry with backoff to src/ingestion/pipeline.py and run it until done. This is a forward change to the uploader.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/software-change.md"
+      ],
+      "expected_delivery_owner": "software-change"
+    },
+    {
+      "id": 87,
+      "expected": "planning",
+      "tests": "investigation positive: planned read-only cited explanation owns delivery",
+      "query": "Plan a read-only investigation of how src/auth/flow.ts rotates refresh tokens. Deliver a cited explanation with measured, inferred and unverified claims distinguished, without changing source.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/investigation.md"
+      ],
+      "expected_delivery_owner": "investigation"
+    },
+    {
+      "id": 88,
+      "expected": "none",
+      "tests": "investigation negative: ordinary how/why outside a plan reads neither index nor playbooks",
+      "query": "Why do refresh tokens rotate? Just explain the idea briefly; I am not asking for a plan or an investigation.",
+      "expected_reads": [],
+      "expected_delivery_owner": "none"
+    },
+    {
+      "id": 89,
+      "expected": "planning",
+      "tests": "hillclimb positive: non-software metric improvement with frozen target and minimum attempts",
+      "query": "Plan improving a local plain-text instruction sheet from 90 seconds to under 60 seconds median task time, with at least 4 measured attempts and a cap of 8. Deliver the final sheet, timing comparison and attempt log. No software changes or publication.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/hillclimb.md"
+      ],
+      "expected_delivery_owner": [
+        "hillclimb",
+        "general"
+      ]
+    },
+    {
+      "id": 90,
+      "expected": "planning",
+      "tests": "hillclimb negative: ordinary correctness fix without a metric selects only software-change",
+      "query": "Plan fixing the auth flow so a revoked refresh token is rejected. It is a correctness bug, with no metric-improvement goal.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/software-change.md"
+      ],
+      "expected_delivery_owner": "software-change"
+    },
+    {
+      "id": 91,
+      "expected": "planning",
+      "tests": "prototype positive: plan goal is throwaway variants and observed evidence; incidental code never ships",
+      "query": "Plan building two throwaway checkout layout variants and observing the same checkout tasks on each. Deliver the variants and comparison evidence so I can pick the density later. The prototype itself is the goal, not a production feature.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/prototype.md"
+      ],
+      "expected_delivery_owner": "prototype"
+    },
+    {
+      "id": 92,
+      "expected": "previewing",
+      "tests": "prototype negative: bare mock-it-up request goes to previewing without index or prototype reads",
+      "query": "Mock up the checkout redesign as a local review page so I can see the screens and edge cases.",
+      "expected_reads": [],
+      "expected_delivery_owner": "none"
+    },
+    {
+      "id": 93,
+      "expected": "planning",
+      "tests": "hillclimb plus software-change: both read, AND checks, sole software delivery owner",
+      "query": "Plan reducing the ingestion pipeline p95 runtime from 100 seconds to below 60 by changing its Python code, with a frozen benchmark, at least 4 measured attempts and an 8-attempt cap. Deliver the code change and measured comparison.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/hillclimb.md",
+        "planning/references/playbooks/software-change.md"
+      ],
+      "expected_delivery_owner": "software-change"
+    },
+    {
+      "id": 94,
+      "expected": "planning",
+      "tests": "released software alias resume: inline selection resolves through index without rewriting plan",
+      "query": "Resume the already approved plan at .mentor/plans/eval-resume/plan.md, retaining its saved selection.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/software-change.md",
+        ".mentor/plans/eval-resume/plan.md"
+      ],
+      "expected_delivery_owner": "software-change",
+      "fixture_files": {
+        ".mentor/plans/eval-resume/plan.md": "# Saved selection fixture\n\nGoal: Preserve the approved deliverable while resuming the saved selection.\n\n## Context\n\nThis released plan is already approved. Resolve its saved selection without rewriting it.\n\n## Playbook: playbook-software-change\n\n## Implementation steps\n\n### 1. Historical completed step ✅\n\n- Done when: the historical artifact passes its saved check.\n\n### 2. Step with a saved verdict\n\n- Done when: the second artifact passes its saved check.\n\n## Goal check\n\nBoth artifacts pass their checks.\n\n## Decision log\n\n| # | use case | decision | why | evidence | result | review? |\n|---|---|---|---|---|---|---|\n| 1 | general | Step 1 graded | Historical released check | historical tick | PASS | no |\n| 2 | general | Step 2 graded | Saved verifier result | verdicts/step-2.md | PASS | no |\n",
+        ".mentor/plans/eval-resume/.state.json": "{\"state\": \"in_progress\", \"note\": \"\"}"
+      }
+    },
+    {
+      "id": 95,
+      "expected": "planning",
+      "tests": "released retrospective alias resume: next-line selection resolves through index without rewriting plan",
+      "query": "Resume the already approved plan at .mentor/plans/eval-resume/plan.md, retaining its saved selection.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/retrospective.md",
+        ".mentor/plans/eval-resume/plan.md"
+      ],
+      "expected_delivery_owner": "retrospective",
+      "fixture_files": {
+        ".mentor/plans/eval-resume/plan.md": "# Saved selection fixture\n\nGoal: Preserve the approved deliverable while resuming the saved selection.\n\n## Context\n\nThis released plan is already approved. Resolve its saved selection without rewriting it.\n\n## Playbook\n\nplaybook-retrospective\n\n## Implementation steps\n\n### 1. Historical completed step ✅\n\n- Done when: the historical artifact passes its saved check.\n\n### 2. Step with a saved verdict\n\n- Done when: the second artifact passes its saved check.\n\n## Goal check\n\nBoth artifacts pass their checks.\n\n## Decision log\n\n| # | use case | decision | why | evidence | result | review? |\n|---|---|---|---|---|---|---|\n| 1 | general | Step 1 graded | Historical released check | historical tick | PASS | no |\n| 2 | general | Step 2 graded | Saved verifier result | verdicts/step-2.md | PASS | no |\n",
+        ".mentor/plans/eval-resume/.state.json": "{\"state\": \"in_progress\", \"note\": \"\"}"
+      }
+    },
+    {
+      "id": 96,
+      "expected": "planning",
+      "tests": "S12 supported-history negative: historical tick and saved verdict are not blanket re-graded",
+      "query": "Resume the already approved .mentor/plans/eval-resume/plan.md. The previous session said steps 1 and 2 passed; inspect the saved history before deciding which inherited claims need re-checking.",
+      "expected_reads": [
+        "planning/references/playbooks.md",
+        "planning/references/playbooks/software-change.md",
+        "planning/references/principles.md",
+        ".mentor/plans/eval-resume/plan.md",
+        ".mentor/plans/eval-resume/verdicts/step-2.md"
+      ],
+      "expected_delivery_owner": "software-change",
+      "fixture_files": {
+        ".mentor/plans/eval-resume/plan.md": "# Saved selection fixture\n\nGoal: Preserve the approved deliverable while resuming the saved selection.\n\n## Context\n\nThis released plan is already approved. Resolve its saved selection without rewriting it.\n\n## Playbook: playbook-software-change\n\n## Implementation steps\n\n### 1. Historical completed step ✅\n\n- Done when: the historical artifact passes its saved check.\n\n### 2. Step with a saved verdict\n\n- Done when: the second artifact passes its saved check.\n\n## Goal check\n\nBoth artifacts pass their checks.\n\n## Decision log\n\n| # | use case | decision | why | evidence | result | review? |\n|---|---|---|---|---|---|---|\n| 1 | general | Step 1 graded | Historical released check | historical tick | PASS | no |\n| 2 | general | Step 2 graded | Saved verifier result | verdicts/step-2.md | PASS | no |\n",
+        ".mentor/plans/eval-resume/.state.json": "{\"state\": \"in_progress\", \"note\": \"\"}",
+        ".mentor/plans/eval-resume/verdicts/step-2.md": "Verdict: PASS\nGrading: independent\nAuthor family: claude\nVerifier family: codex\n\nCheck: the second artifact passes its saved check.\nEvidence: saved second-artifact check, exit 0.\n"
+      },
+      "expected_history_to_recheck": []
     }
   ]
 }

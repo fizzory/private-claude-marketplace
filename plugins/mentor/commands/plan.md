@@ -62,11 +62,8 @@ Do these in order:
    right. Proceed and Deliver plan only validate the plan and release the gate; Keep
    planning stays in planning.
 
-3. **Proceed** — run the plan per the skill's `{#implement}` section until its Goal
-   check passes: every step graded by an independent verifier, every decision logged,
-   pausing only for always-pause items or a stop word, ending with a Done review. `approve-plan.sh`
-   writes the session's run marker, and the `plan-continue.sh` Stop hook keeps the run
-   going until a terminal state. **Deliver plan only** releases the gate and then STOPs,
+3. **Proceed** — follow planning → **After Proceed** (`{#implement}`) for the full
+   run directive. **Deliver plan only** releases the gate and then STOPs,
    exactly as the skill states — it does not implement in this session.
 
 **Never re-run step 1 once it has armed the gate.** `begin-plan.sh` resets THIS worktree's

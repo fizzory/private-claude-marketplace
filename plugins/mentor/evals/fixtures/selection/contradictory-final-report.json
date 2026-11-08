@@ -1,0 +1,12 @@
+{
+  "description": "An earlier marker cannot override the authoritative final owner or history report.",
+  "earlier_report": "EVAL_SELECTION {\"delivery_owner\":\"software-change\",\"history_to_recheck\":[]}",
+  "final_reports": [
+    "Delivery owner: retrospective\nHistory to recheck: []",
+    "Delivery owner: software-change\nHistory to recheck: [1, 2]",
+    "Delivery owner: software-change\nHistory to recheck: unknown",
+    "Delivery owner: software-change. Delivery owner: retrospective.\nHistory to recheck: []",
+    "Stopped."
+  ],
+  "matching_final_report": "Delivery owner: software-change\nHistory to recheck: []"
+}

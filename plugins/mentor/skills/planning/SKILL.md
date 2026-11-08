@@ -1,15 +1,20 @@
 ---
 name: planning
 description: >
-  Plan any goal — code, docs, research, data, ops — then run it to a checkable done
-  with the human approving once. Use whenever the user asks to plan, design, scope,
-  or "do X end to end" before building it. Researches, picks a matching playbook
-  skill at runtime, settles questions by evidence or a decision-maker agent (asking
-  the human only for genuine product calls), writes a durable Mermaid-first plan
-  under .mentor/ with a Goal check and a decision log, takes one approval, then
-  drives every step to an independently verified PASS and delivers a Done review.
-  In Claude Code, /mentor:plan is the command facade that pre-arms its edit gate;
-  other hosts use the same contract with an advisory read-only boundary.
+  Plan and run goals with one approval, a durable .mentor/ plan and independent
+  checks. Use for requests to create a plan (including design or scope before work),
+  run a goal end to end, or continue executing an identified approved .mentor/ plan.
+  Also use for retrospectives of the current or one named finished agent session:
+  "retro", "retrospective", "reflect on this session", "lessons learned",
+  "what should become a skill", "turn this session into a skill",
+  "turn what I keep doing into a skill", "lessons from today's session",
+  "look back over what we did", or "worth saving as a reusable skill or a tweak to an
+  existing one". Rebuilds from disk even for empty, short or compacted threads,
+  applies local skill changes and reports proposals.
+  NOT for batch harvesting across sessions (loom), progress/status recall or handoff
+  notes, routine plan-document edits, direct edits/refactors without a plan or
+  end-to-end request, ordinary how/why questions, standalone shipping/merging,
+  or bare mockups (previewing).
 ---
 
 # mentor Plan
@@ -99,8 +104,12 @@ ticks have not taken it past that (with helpers, `plan-state.sh query --slug <sl
 `begin-plan.sh` applies. If `owner` is set and differs from this worktree, and this is
 not the facade path, ask the user before building.
 
-Then load the constitution (below in this step) and every playbook the plan's
-`## Playbook` line names, skip Steps 1–6, and go to **After Proceed — run until the
+Then load the constitution (below in this step), read `references/playbooks.md`, and
+Read each file selected by the plan's `## Playbook` value through that index. Accept
+both an inline value (`## Playbook: playbook-software-change`) and a value on the
+next non-empty line after `## Playbook`; resolve released aliases without rewriting
+the plan. This preserves approved selections when playbook files move.
+Skip Steps 1–6 and go to **After Proceed — run until the
 Goal check passes** (`{#implement}`) for that slug — re-planning an approved plan would
 only re-ask a question the user already answered. Two checks first: a `note` saying it
 was **not individually reviewed** (a plan swept in by a release) means nobody approved
@@ -111,6 +120,12 @@ writes one, for the session that approved), so the Stop hook does not hold this
 session: keep working until a terminal state per **Hosts without a Stop hook or
 subagents**. To re-plan instead, run `plan-state.sh set <slug> draft`, then plan it
 again (`/mentor:plan <slug>` in Claude Code).
+
+On resume, load `references/principles.md` once per context (re-read after compaction)
+and revisit only the relevant entry when re-checking inherited claims backed by
+neither a tick nor a verdict file: **a passing prior self-report is not the proof**.
+Use the existing readers for historical ticks and saved verdicts; do not blanket
+re-grade supported history. This checks unsupported claims without redoing proven work.
 
 **Load the constitution.** Resolve the constitution path (a repo may keep its
 governing doc outside `.mentor/` — `constitution_path` in `.mentor/config.json`
@@ -206,7 +221,8 @@ Never call `record-write` merely to clear a change notice. This preserves outsid
 changes and keeps mentor's own writes from appearing as drift (mechanism:
 `references/rationale.md` → **Plan-file continuity — early drafts, feedback, and tracked writes**).
 
-Write a new skeleton with the title, `Rev 1 · YYYY-MM-DD · Research started`,
+Write a new skeleton with the title, `Rev 1 · YYYY-MM-DD · Research started`, a
+plan-level `Goal:` line stating the user's intended outcome,
 `## Context`, `## Research notes`, and `## Decision log` (the flat table in Step 4's
 Content spec); extend a reused draft without replacing its content or Rev history.
 Append findings and decision rows as they land, and complete the remaining sections
@@ -215,12 +231,12 @@ visible in `plan-state.sh list`, without a cleanup prompt. This keeps research a
 decisions recoverable through compaction (rationale: **Plan-file continuity — early
 drafts, feedback, and tracked writes**).
 
-**Pick a playbook.** A playbook is a skill named `playbook-<name>` whose
-description states the goal shapes it fits (`playbook-software-change` fits
-"change code in a repo"). Match the goal against the descriptions of the
-playbooks available this session — the session's skill list, not a filesystem
-hunt — and load each that fits. A loaded playbook supplies five overlays the
-general flow reads at the points named in brackets:
+**Pick a playbook.** Read `references/playbooks.md`, match the requested plan
+deliverables to its "Loads when…" entries, then Read each matching file as a
+reference. Do not select from the session's skill list or invoke playbook skills;
+deliverables, rather than incidental code or installed skills, determine the match.
+An ordinary question outside a plan loads no playbook. A selected file supplies
+these overlays at the named points:
 
 | Overlay | Read at |
 |---|---|
@@ -229,12 +245,24 @@ general flow reads at the points named in brackets:
 | Extra always-pause items | the run (After Proceed), on top of the constitution's |
 | Deliver mode | the run's deliver state |
 | Evidence kinds | the Done review |
+| Run rules (optional; absent means none) | After Proceed, throughout the run |
 
-Record the pick as a `## Playbook` line in the plan and a decision-log row. No
-match → the general flow runs alone (`## Playbook` reads `none`). Several may
-match: their overlays combine and their always-pause items are a union. The user
-can name or refuse a playbook in plain words; that wins over the match.
+Record the indexed names as the plan's `## Playbook` value and a decision-log row.
+No match → the general flow runs alone with delivery owner `general`
+(`## Playbook` reads `none`). The user can name or refuse a playbook in plain words;
+that wins over the match.
 
+**Combine overlays before approval.** Definitions of done combine with AND, scoped
+per artifact. Choose one delivery owner during planning (a selected playbook or the
+general flow), record it in the decision log, and include compatible secondary
+outputs in its delivery. Deduplicate research and evidence; union always-pause
+items with the constitution's or built-in list. Resolve incompatibilities before
+approval, never by load order; do not add a prototype overlay mid-plan. This keeps
+one coherent delivery contract without weakening any applicable check.
+
+Load `references/principles.md` once per context before research (re-read after
+compaction); at later decision points revisit only the relevant entry. Apply matching
+entries so research tests assumptions and covers causes before choosing a fix.
 Research what the plan needs: the files, config, docs and history the work touches,
 and the facts each decision will turn on. How you gather it is up to you and the host —
 read directly for a small task, or use whatever research tooling the host offers for a
@@ -323,6 +351,9 @@ fork you noticed yourself (approach A vs B, scope boundary, acceptance criteria,
 naming). The human is asked only what no one else can answer (AGENTS.md →
 Mentor core concept, rule 4).
 
+Revisit only the relevant entry in `references/principles.md` during triage; name a
+principle in the decision log only when it changes a choice, so the log records
+decisions rather than a checklist.
 Triage each item into exactly one bucket, in this order:
 
 1. **Codebase-answerable** — the files, config, history, or docs settle it.
@@ -343,17 +374,34 @@ Triage each item into exactly one bucket, in this order:
 **Immaterial** items — the plan comes out the same either way — are dropped, or
 logged as a flagged assumption.
 
-### Decision-maker dispatch {#decision-maker}
+### Role resolution {#decision-maker}
 
-- **Brief** (self-contained; the agent inherits none of your context): the
-  question in plain words, the options known so far with their consequences, the
+Delegate only work the goal needs, and resolve every needed role by its described
+domain or purpose. This keeps the workflow portable across hosts and agent registries
+without creating work merely to fill roles.
+
+Open every role brief with the plan-level Goal: line verbatim, or `Goal:` followed
+by the user's request if no plan exists.
+For a released plan that has no plan-level Goal: line, derive one sentence from its approved Context and Goal check, cite those sections in the brief, and leave the saved plan and its predicate unchanged.
+Put the local task after it so every agent can judge its work against the user's
+intended outcome.
+
+- **Purpose:** decide system design (architecture, backend, data, infra, or rollout);
+  decide what a person sees or does; decide scope, process, or docs; research facts;
+  build the artifact; grade the result independently; or settle conflicting findings.
+- **Resolution order:** honor an explicit session mapping first; otherwise choose an
+  installed agent whose description fits the needed domain or purpose, regardless of
+  its name or tool. If none fits, brief a general-purpose agent for that purpose,
+  including "decide; do not ask" for decision work. If delegation is unavailable or
+  prohibited, perform the work serially in the main thread, retaining the same scope,
+  evidence, and verification contract, including labelled self-grading when required.
+
+**Decision-maker contract** — apply to whichever agent resolves a decision:
+
+- **Brief** (self-contained; the agent inherits none of your context): open with the
+  goal as above, then the question in plain words, the options known so far with their consequences, the
   constitution's Decision authority section verbatim, and the evidence with
   `file:line` or command output.
-- **Routing**, using the first agent present in the host's agent list:
-  `system-decision-maker` for architecture, backend, data, infra, or rollout;
-  `ux-decision-maker` for anything a person sees or does; `general-decision-maker`
-  for everything else. When none exists, dispatch a general-purpose subagent with
-  the same brief and the instruction "decide; do not ask".
 - **Return**: `choice · why · evidence · product_call: yes|no`. A `yes` sends the
   item to bucket 4. Several independent items may go out in one batch.
 - Every decision becomes one decision-log row (Step 4), `result: decided`.
@@ -507,6 +555,8 @@ it prints is informational and never fails the call, `CHECK: context` included;
 that one is the same reading "Re-check context" below asks for, so if nothing
 else ran between this call and the approval ask, that reading already
 satisfies it — no second `context` call needed.
+Only a plan whose stored state is `draft` gets `CHECK: untraced step N` when a
+step's `Goal:` lacks `serves S`; this is informational, and released plans skip it.
 
 ### Content spec
 
@@ -522,10 +572,12 @@ Required sections, in order:
    during Steps 2–3, step ticks, or run-time log rows. `verify` already reports Rev-line
    order; the newest line identifies the content the user is asked to approve.
    A plan with no Rev line yet gets `Rev 1` on its next content revision.
+   Below the title and Rev lines, keep a one-line plan-level Goal: stating the user's
+   intended outcome; reuse it verbatim in Step 6's approval card and every brief.
 2. `## Context` — the problem, what prompted it, intended outcome. Retain Step 2's
    `## Research notes` directly after it.
 3. `## Use case scenarios` — actors & triggers; current vs expected behavior;
-   numbered concrete scenario walkthroughs (real values from research, not
+   concrete scenario walkthroughs labelled `S1`, `S2`, … (real values from research, not
    placeholders); edge cases & assumptions (flag anything unverified). Give this
    section visualization treatment — a Mermaid flowchart/sequenceDiagram of
    actor→trigger→outcome, or a current-vs-expected GFM table — so the reviewer
@@ -547,6 +599,9 @@ Required sections, in order:
 6. `## Implementation steps` — numbered and concrete. Every step carries `Goal:`,
    `Inputs:` and `Done when:` on `-` bullets under its numbered heading; `verify` fails
    a step with no `Done when:` under it.
+   End each step's `Goal:` with the scenario(s) it serves, e.g. `(serves S1, S3)`.
+   During drafting, move a step serving neither a scenario nor a Goal-check clause
+   into `## Out of scope`, so the plan contains only work the goal needs.
    **Keep it small while you write:** if the step count creeps past ~12, move non-core
    **isolated deliverables** into `## Out of scope` (each can become its own plan later).
    A plan's `## Verification` section is never one of those chunks — every topic stays
@@ -588,7 +643,7 @@ Required sections, in order:
    cold), write that check as a topic here, not into a step's `Done when:` — keep
    each `Done when:` to a bounded check, so a step can be ticked the moment its own
    change is proven.
-10. `## Playbook` — one line: the playbook skill(s) picked in Step 2, or `none`.
+10. `## Playbook` — one line: the indexed playbook name(s) picked in Step 2, or `none`.
 11. `## Goal check` — the plan's done predicate: one runnable or observable check
     against the real deliverable, falsifiable, never a restatement of the steps
     ("`scripts/check` exits 0", "the brief covers all 5 regions, each with a cited
@@ -701,7 +756,7 @@ previous ask:
 
 ```text
 Plan ready: [.mentor/plans/<slug>/plan.md](<absolute path printed by plan-state.sh start>) · Rev <N>
-Goal: <one sentence>
+Goal: <the plan-level Goal sentence, verbatim>
 <steps> steps · Goal check: <the predicate, one line>
 Changed since last ask: <the newest Rev line's note>
 ```
@@ -823,11 +878,15 @@ The approval was the human's one gate. From here the run drives the plan to its
 Goal check without asking, and records every choice it makes in `## Decision log`
 for review afterwards (AGENTS.md → Mentor core concept, rules 1–6).
 
+Read the selected playbooks' optional **Run rules** before starting or resuming the
+loop and follow them throughout; an absent slot means none. Attempt constraints
+must govern the work as it runs, not just its final acceptance check.
+
 ```mermaid
 stateDiagram-v2
   [*] --> building: Proceed, run marker written
   building --> grading: step built
-  grading --> ticked: verifier PASS row
+  grading --> ticked: saved verdict, PASS row, record-write, tick
   grading --> building: FAIL, retry once
   grading --> replanning: FAIL twice
   replanning --> building: re-plan 1 per step, 3 per run
@@ -858,7 +917,7 @@ and names the next step; `paused`, `failed`, and `done` all let the session end.
 ```bash
 bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" set <slug> in_progress            # run starts / resumes
 bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" record-write <slug>               # immediately after every plan.md write
-bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" tick <slug> <N>                   # after PASS row → record-write
+bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" tick <slug> <N>                   # after save verdict → PASS row → record-write
 bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" set <slug> approved --note "paused: row N"
 bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" set <slug> implemented            # Goal-check PASS + Done review + delivered
 bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" set <slug> failed --note "<what broke>"
@@ -883,20 +942,32 @@ drafts, feedback, and tracked writes**).
 
 1. `set <slug> in_progress`. Build steps in order.
 2. **Grade every step independently.** When a step looks done, dispatch one fresh
-   verifier with its `Goal:` and `Done when:` per `references/verifier-contract.md`.
-   On PASS, append a `PASS` row citing the verdict file, run
-   `plan-state.sh record-write <slug>`, then `plan-state.sh tick <slug> <N>`.
-   No PASS row, no tick — the builder never grades
-   its own work. Tick per step, never in a batch.
-3. **FAIL** → fix the `[GOAL]` gaps and re-grade once with a fresh verifier. A second
-   FAIL → **re-plan** that step: rewrite its approach (log a `review?: needed` row),
-   at most once per step and three times per run. **A re-plan never weakens a
+   verifier with the plan-level Goal: first, then the step's `Goal:` and `Done when:`
+   per `references/verifier-contract.md`.
+   Use the host's verifier role settings and wait for the returned block; save it
+   verbatim to `verdicts/step-N.md`, overwriting the previous grade. On PASS, append
+   decision `Step N graded`, evidence
+   `verdicts/step-N.md · <grading> · <author>/<verifier> family`, result `PASS`; then run
+   `plan-state.sh record-write <slug>` and `plan-state.sh tick <slug> <N>`.
+   Follow the contract's grading and family headers, including the labelled
+   `self-graded` fallback. This preserves the grade for resumed runs and keeps the
+   builder from presenting its own judgment as independent. Tick per step, never in a
+   batch, after its PASS row; tick now refuses new ticks without a saved PASS verdict.
+3. **FAIL** → revisit only the relevant entry in `references/principles.md`, fix the
+   `[GOAL]` gaps and re-grade once with a fresh verifier. A second FAIL → write down
+   and test any shared premise before another fix, then **re-plan** that step:
+   rewrite its approach (log a `review?: needed` row), at most once per step and
+   three times per run.
+   Testing the premise keeps the next fix tied to evidence. **A re-plan never weakens a
    `Done when:` or the Goal check** — the verifier reports a weakened check as a FAIL.
    Limit hit → `failed`.
 4. **Every choice the plan does not cover** — a library, a file layout, a wording, a
    workaround — is triaged as in Step 3 (evidence first, then a decision-maker) and
    gets a row. It never becomes a question to the human; a reversible product call
    goes to a decision-maker, logged `review?: needed`.
+   Fix a mid-run discovery only when the Goal check or the current step's Done when
+   cannot pass without it; otherwise list it as a leftover in the Done review.
+   This keeps the run on its approved goal instead of accumulating related work.
 5. **Pause only for an always-pause item** — the constitution's list, the built-in
    default (constitution-authoring → "The autonomy contract"), or a picked playbook's
    extra items — or a stop word ("stop", "pause", "wait"). Write a `paused` row, set
@@ -904,19 +975,25 @@ drafts, feedback, and tracked writes**).
    report the verdict line below with its one question underneath, and on the answer
    write `resumed` and continue.
 6. When every step is ticked, dispatch the `## Verification` topics (one fresh
-   verifier each), write the **Done review** below, then dispatch the **Goal check**
-   verifier with it. A FAIL re-enters step 3's re-plan path for the step that owns
-   the gap.
-7. **Deliver.** The general deliver state hands the deliverable named in the Goal check
-   to the human and points to the Done review in `plan.md`. A picked playbook's Deliver
-   mode replaces this.
+   verifier each), wait and save each returned block verbatim to `verdicts/topic-N.md`;
+   write the **Done review** below, then dispatch the **Goal check** verifier with it,
+   wait and save its block to `verdicts/goal.md` per the same contract. Saving each
+   grade separately keeps failures visible on resume. A FAIL re-enters step 3's
+   re-plan path for the step that owns the gap.
+7. **Deliver.** Follow the single delivery owner chosen in Step 2, including the
+   compatible secondary outputs recorded there. When the general flow owns delivery,
+   hand the deliverable named in the Goal check to the human and point to the Done
+   review in `plan.md`; otherwise follow that playbook's Deliver mode.
+   For a released plan with no recorded owner, use its selected playbook's Deliver
+   mode, or the general flow for `none`, so its approved delivery still works.
 8. `set <slug> implemented`, remove the run marker, and report the verdict line below.
    After reporting, offer
    a retrospective in one line (`/mentor:retro` in Claude Code; on other hosts, ask for a
    retrospective of this session) to turn this session's lessons into skills — a
    non-blocking invitation so repeated steps become reusable without the human having to
-   ask. Skip the offer when this plan's `## Playbook` is `playbook-retrospective` (a retro
-   inviting its own retro is noise).
+   ask. Skip the offer when this plan's `## Playbook` resolves through the index to
+   `retrospective` (including `playbook-retrospective`); a retro inviting its own retro
+   is noise.
 
 For every terminal report (`PASS`, `paused`, or `failed`), send one verdict line:
 
@@ -936,8 +1013,11 @@ without pasting them into chat, so the file remains the review record — except
 playbook's deliver mode puts in a PR body or its own hand-over question (see merging's
 hand-over question).
 
-A dead end is reported, not spun on: two identical failures in a row with no new
-evidence is a re-plan, never a third identical attempt.
+Treat **a plateau is not a stop** as a run rule only while untried hypotheses remain;
+pivot within the retry/attempt caps. The caps and the dead-end rule take precedence:
+two identical failures in a row with no new evidence require a re-plan, never a third
+identical attempt; report a genuine dead end as `failed`, never weaken the predicate.
+This permits evidence-led progress without an unbounded loop.
 (Why it runs on its own and what keeps that safe: `references/rationale.md` → **After
 Proceed — why the run keeps going on its own**.)
 
@@ -963,8 +1043,10 @@ case scenarios:
    flag flip, a deploy, a config or secret change): numbered steps under **Before**,
    **Hand-over**, **After**, and **Rollback** (a playbook may rename them). Otherwise
    one line: `Runbook: n/a, hand-over is self-contained`.
-3. **Leftovers** in plain words — follow-ups, gaps, known-broken items. Do not park or
-   capture them yourself; what happens to leftover work is the user's call.
+3. **Leftovers** in plain words — follow-ups, gaps, known-broken items. Fix a mid-run
+   discovery only when the Goal check or the current step's Done when cannot pass
+   without it; list everything else here so related work does not expand the run.
+   Do not park or capture leftovers yourself; what happens to them is the user's call.
 
 Under it, render the decision log **grouped by use case**, `review?: needed` rows first
 within each group. The flat table stays canonical; this rendering is for the reader.

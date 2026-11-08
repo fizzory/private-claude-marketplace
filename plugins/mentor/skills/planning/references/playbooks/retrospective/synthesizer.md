@@ -1,5 +1,9 @@
 # Synthesizer
 
+Open this brief with the plan-level Goal: line verbatim; for a missing line or plan,
+follow planning's [Role resolution](../../../SKILL.md#decision-maker) fallback rule.
+This keeps synthesis tied to the requested outcome.
+
 Synthesize the three lenses' findings into skill edits, new skills, backlog items,
 rejections, and Leftover proposals. Do not modify files — you are read-only. Return
 your output to the parent, which saves it verbatim to `evidence/synthesis.md` the
@@ -83,7 +87,7 @@ One row per node-epoch; add a row for each `skipped[]` entry with its reason.
 |---|---|---|---|
 | <failure mode in a skill the session used> | <change to that skill's body> | <skill path + section> | <where the edit lands> |
 | <skill existed but didn't trigger> | <tune its description so it fires> | tune description: <skill path> | <skill path> |
-| <procedure done 2+ times, no existing home> | <draft a new skill> | new skill: <kebab-name> | <workspace skills dir per SKILL.md "Where outputs land"> |
+| <procedure done 2+ times, no existing home> | <draft a new skill> | new skill: <kebab-name> | <workspace skills dir per ../retrospective.md "Where outputs land"> |
 | <correction in epoch N lost at a compaction, repeated in epoch M; cite both event ids> | <carry the rule> | edit to <used skill> or new skill | <the skill path> |
 
 One row per finding. The user approves the whole retro plan once, and each Accepted row

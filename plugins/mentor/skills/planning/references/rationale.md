@@ -40,7 +40,8 @@ shell writes, and hosts without hooks cannot observe any model write that way. A
 mentor-authored PASS row would then look like an outside edit when `tick` checked
 drift. Explicit `record-write` immediately after each mentor write covers every host
 and write mechanism, and is harmless when a hook already recorded the same bytes.
-The run therefore orders its writes as PASS row → `record-write` → `tick`.
+The run therefore orders its writes as save `verdicts/step-N.md` → PASS row →
+`record-write` → `tick`.
 
 The pre-edit `drift` check and a read of changed content protect changes that arrived
 since the last tracked write. Recording the hash merely to dismiss a notice would

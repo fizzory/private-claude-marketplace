@@ -5,8 +5,8 @@ mentor keeps working until the done-check passes.** It stops only for actions on
 constitution's always-pause list, and records every decision it makes for you to review
 afterwards. It is general-purpose — a report, a data cleanup, a doc set, or a code change
 all run the same flow; software-specific steps (tests, branches, pull requests, merging)
-live in a separate playbook skill that planning picks at runtime when the goal is a code
-change. Plans are durable **Mermaid-first Markdown** artifacts in the repository's
+live in a separate playbook reference that planning reads through its index when the
+goal is a code change. Plans are durable **Mermaid-first Markdown** artifacts in the repository's
 **`.mentor/`** directory (gitignored, shared across worktrees), and the portable skills run
 on Claude Code, Codex, or another capable agent.
 
@@ -25,12 +25,13 @@ paragraph applies it): done is a check, never block on the human, a decision log
 before asking, an independent grader, and run until the check passes. Concretely, the edit
 gate keeps the repo read-only until the one approval; after it, the run drives the plan to
 its Goal check through **native host primitives** — the `plan-continue.sh` Stop hook, fresh
-foreground verifier subagents, and the host's own loop — and pauses only for always-pause
+verifier subagents, and the host's own loop — and pauses only for always-pause
 items. Mentor is **not a hand-rolled sequencer**: no component re-polls script verdicts in a
 bash ladder (v2.37's removed "instant" ladder is the banned shape), and the Stop hook decides
 only "may this session stop now?" from the run marker and the plan's stored state — never
-what to do next. Single point-in-time reads like `gate`/`context`/`verify` are fine. Every
-skill is an **independent primitive**: it may point at a sibling or execute a verdict just
+what to do next. Single point-in-time reads like `gate`/`context`/`verify` are fine.
+A point-in-time verdict read before a new tick is also allowed. Every skill is an
+**independent primitive**: it may point at a sibling or execute a verdict just
 reached, but never claims the session's lifecycle or governs a sibling's internals —
 `frontend-self-ex-review` is the reference shape; a playbook is loaded *by* planning and only
 fills slots planning leaves open. The plan file is mentor's **primary** source of truth,
@@ -65,8 +66,8 @@ In Claude Code, `/mentor:plan` additionally:
    THIS worktree are blocked until approval; other worktrees plan and edit
    independently (see "Known limitations").
 2. Follows the `planning` skill: optional clarify (grilling), a **playbook pick** (a
-   `playbook-*` skill whose description matches the goal — `playbook-software-change` for
-   code), research (starting with a plan-file skeleton), then **triage** of every open question: answered from the material, settled
+   reference from `skills/planning/references/playbooks.md` whose “Loads when…” entry
+   matches the goal — `software-change` for code), research (starting with a plan-file skeleton), then **triage** of every open question: answered from the material, settled
    by a quick experiment, decided by a decision-maker agent within the constitution's Decision
    authority, or — only for a genuine product call — asked via `AskUserQuestion` with evidence
    and a recommended option. Findings and decision-log rows land incrementally in
@@ -80,7 +81,8 @@ In Claude Code, `/mentor:plan` additionally:
    validates the plan (non-empty, newer than the marker) and deletes the gate marker;
    Proceed also writes the session's run marker `.mentor/.run-<session_id>`.
 4. **The run.** Each step is built, graded by a fresh verifier
-   (`skills/planning/references/verifier-contract.md`), and ticked only after a PASS row.
+   (`skills/planning/references/verifier-contract.md`) in this order:
+   save `verdicts/step-N.md` → PASS row → `record-write` → tick.
    A FAIL retries once, then re-plans (once per step, three times per run, never weakening a
    check), then `failed`. Every choice not in the plan gets a log row. The run pauses only for
    always-pause items or a stop word. When all steps are ticked, the `## Verification` topics are graded,
@@ -115,24 +117,86 @@ another host, invoke the matching skill or describe the same intent naturally.
 | Command | What it does |
 |---|---|
 | `/mentor:plan <task>` | The gated plan flow (above). |
-| `/mentor:retro [session]` | **Retrospective of a finished session** — rebuilds the session from disk (even after several compactions, and across Claude or Codex subagents and agt workers), runs three lenses and a synthesizer over it, and turns the approved findings into skill changes (new skills for repeated procedures, edits, description tunes). A thin facade over the gated plan flow: it refuses while this session's own run is `in_progress` or paused (stored `approved`), and stops without arming when `jq` is missing, then arms the gate and hands `planning` a retro goal that loads `playbook-retrospective`. Offered as a one-line invitation after a plan reaches `implemented`. `--claude-config` / `--codex-home` / `--agt-home` point it at explicit source-transcript roots. |
+| `/mentor:retro [session]` | **Retrospective of a finished session** — rebuilds the session from disk (even after several compactions, and across Claude or Codex subagents and agt workers), runs three lenses and a synthesizer over it, and turns the approved findings into skill changes (new skills for repeated procedures, edits, description tunes). A thin facade over the gated plan flow: it refuses while this session's own run is `in_progress` or paused (stored `approved`), and stops without arming when `jq` is missing, then arms the gate and hands `planning` a retro goal that selects the `retrospective` reference from its index. Offered as a one-line invitation after a plan reaches `implemented`. `--claude-config` / `--codex-home` / `--agt-home` point it at explicit source-transcript roots. |
 | `/mentor:preview [subject]` | **One scenario-based review page for a plan or any subject** — a repo subsystem, a doc, a mentor plan, or the thing under discussion; no plan file or planning session required. Draws only what the subject changes: a mockup of every surface each scenario reaches (each edge case its own card, Before/After per scenario), each sequence under the scenario that starts it, the C4 levels that move, the changed data and contracts, and the decisions; every card has a comment box with Copy, and open questions come back to chat one at a time. Writes `.mentor/reviews/<subject-slug>/review.html` (gitignored), opens it, and offers to publish it on Claude. `planning` Step 5 delegates here for an in-planning page. |
 | `/mentor:ship` | Finish the current branch: clean-check → `/simplify` → tests → push + auto-open PR/MR (or push to upstream). Standalone it asks; inside a plan run (the software playbook's deliver mode) it follows the plan's Definition of done and puts the Done review in the PR body. Never force-pushes. |
 | `/mentor:merge [PR#]` | The tail `/mentor:ship` leaves off: one bounded `gh pr checks --watch`, then one triage — flake (one rerun max) / regression (stop and report) / already broken on the base branch (don't spend the rerun; you choose **Merge anyway** or **Leave open**, and any leftover work is named in the report) — then an independent verifier grades the PR, and it merges only on your explicit choice (or under a constitution that grants merge), then walks the runbook's after-merge steps, pausing on always-pause lines. GitHub-only. |
 | `/mentor:grill [topic]` | One-question-at-a-time interview that sharpens a design's open decisions before you approve — also the route for a plan-quality review before approval. Asks only product calls; evidence- and constitution-settleable questions are settled without asking. Conversation only, pre-approval only. |
 | `/mentor:constitution [principles]` | Create/amend this repo's governing principles and autonomy contract (Always-pause list, Decision authority, Definition of done) at `.mentor/constitution.md` — versioned, committed, and honored by every plan and run. |
 
-Three skills have no command of their own; they run from natural language matching their
-`description:` or `Skill({"skill": "mentor:<name>"})` — there is no `/playbook-software-change`,
-`/playbook-retrospective` or `/frontend-self-ex-review` command (the two playbooks are loaded
-*by* `planning`; `/mentor:retro` is a facade that hands `planning` a retro goal, not a direct
-entry to the skill):
+`frontend-self-ex-review` has no command of its own; invoke it through natural language
+matching its `description:` or `Skill({"skill": "mentor:frontend-self-ex-review"})`.
+The seven public skills are `planning`, `grilling`, `previewing`, `shipping`, `merging`,
+`constitution-authoring` and `frontend-self-ex-review`.
 
 | Skill | What it does |
 |---|---|
-| `playbook-software-change` | **The software playbook**, loaded by `planning` at runtime when the goal is a code change. Supplies five overlays the general flow reads: research directives (callers, tests, check commands), the Definition of done (the repo's checks pass), extra always-pause items (force-push, protected branches, merging, destructive migrations), the deliver mode (`shipping` then `merging`), and evidence kinds (test output, CI link, diff stat). Never a workflow of its own. |
-| `playbook-retrospective` | **The retrospective playbook**, loaded by `planning` at runtime when the goal is a retro of a finished session (reached via `/mentor:retro` or the post-`implemented` invitation). Rebuilds the session from disk as an evidence graph — frozen cutoff, compaction epochs, recursive Claude/Codex delegates and optional agt workers (kiro/agy workers stay opaque) — then runs three ported lenses (judgment, tooling, divergent) and a synthesizer that sorts findings into Accepted / Rejected / Backlog. Supplies planning's five overlays: the evidence-graph research, a per-Accepted-row Definition of done (`quick_validate.py`, the trigger check, and a relative, resolving symlink when the destination convention uses one), one extra always-pause item (committing or pushing — lessons that contradict a core concept or change the constitution or another tool's config go to Leftovers, never paused on), local-edits-then-Done-review delivery with Leftovers, and its evidence kinds. Never co-loaded with `playbook-software-change`. Adapted from Cursor's pstack `/reflect`. |
+| `planning` | Plan any goal, select matching runtime playbooks, take one approval, then run to a verified Goal check with a decision log and Done review. Also handles one-session retrospectives. |
+| `grilling` | Pressure-test a plan or design before approval, settling discoverable facts first and asking genuine product questions one at a time. |
+| `previewing` | Build a local scenario-based HTML review page for a plan or any subject, including the affected surfaces, edge cases and comment boxes. |
+| `shipping` | Finish the current branch, run the required checks, then push and open a PR with the Done review when inside a plan run. |
+| `merging` | Watch CI, triage a failure, obtain a fresh pre-merge grade and merge under the governing approval contract. |
+| `constitution-authoring` | Create, amend or inspect the project's principles and autonomy contract without starting a plan run. |
 | `frontend-self-ex-review` | **Self-explanatory UI review, feedback only** — say "make this screen self-explanatory", "make it textless", "too much text", or "users don't know what to click". Reviews a screen, component, flow, screenshot, or proposed design in one of two modes: **audit** (the default — findings tied to `file:line`, each with its proposed change tagged *small fix* or *needs a plan*) and **verify** (checks a change already made: states, ~360px, keyboard — reported as observed / executed / inferred / not tested). It writes no files and no plans; applying the feedback is follow-on work. A general UX/UI review without that goal doesn't trigger it. Cuts decorative and redundant copy by *purpose*, never by keyword, and keeps labels, constraints, consequences, and user content. Isolated from the rest of mentor: beyond the host-portability paragraph every mentor skill carries, it reads no mentor state and calls no mentor helper, so the folder can be copied into any project's skills directory. |
+
+Planning reads the following playbook references through
+[its index](skills/planning/references/playbooks.md); they have no public skill entry
+point. Retrospective requests in natural language and `/mentor:retro` enter planning's
+one-approval flow. Released selections keep resolving through the index aliases.
+Selection follows the requested plan deliverable, not incidental work: an ordinary
+how/why question outside a plan loads nothing, and a bare mockup request uses
+`previewing`. The aliases `playbook-software-change` and `playbook-retrospective`
+resolve in both inline and next-line `## Playbook` formats without rewriting old plans.
+
+| Reference | What it supplies |
+|---|---|
+| [software-change](skills/planning/references/playbooks/software-change.md) | **The software playbook**, loaded by `planning` at runtime when the goal is a code change. Supplies five overlays the general flow reads: research directives (callers, tests, check commands), the Definition of done (the repo's checks pass), extra always-pause items (force-push, protected branches, merging, destructive migrations), the deliver mode (`shipping` then `merging`), and evidence kinds (test output, CI link, diff stat). Never a workflow of its own. |
+| [retrospective](skills/planning/references/playbooks/retrospective.md) | Rebuild one finished session from disk as an evidence graph, run three lenses and a synthesizer, apply accepted local skill changes, and report remaining proposals. Local edits then Done review; never co-loaded with software-change. Host transcript details live in the adapters. |
+| [investigation](skills/planning/references/playbooks/investigation.md) | Produce a read-only cited answer. Label claims measured, inferred or guess; write only the plan's evidence and deliverable, and ship nothing. |
+| [hillclimb](skills/planning/references/playbooks/hillclimb.md) | Improve a named metric through one change → one measurement → keep or revert. Done requires the target AND at least N logged attempts within approved caps; software-change owns delivery when combined. |
+| [prototype](skills/planning/references/playbooks/prototype.md) | Deliver prototype variants and observed comparison evidence so the human can pick. Select only when the prototype itself is the plan goal, never for a mid-plan fork; never ship prototype code. |
+
+## Runtime contracts
+
+The plan-level `Goal:` opens every role brief; the local task follows it. Planning's
+[Role resolution](skills/planning/SKILL.md#decision-maker) honors an explicit session
+mapping first, otherwise chooses an installed agent by its described domain or
+purpose, then a general-purpose agent. Without delegation, work runs serially with
+the same scope and evidence and labelled `self-graded` verdicts. Hooks and subagents
+are host adapter capabilities; the portable fallback remains useful without them.
+
+The caller saves every returned grade verbatim, including FAIL and HANDBACK. The
+latest grade overwrites `verdicts/step-N.md`; a present canonical file wins even
+when a legacy file passes. For a step PASS, the order is save `verdicts/step-N.md` →
+PASS row → `record-write` → tick. A new tick reads that verdict once at the point of
+use and refuses a missing, empty or non-PASS grade; it does not poll or choose work.
+Released `step-N-verify.md` paths remain readable only when the canonical file is
+missing. Legacy headers are optional, comments may precede `Verdict:`, and an
+already-ticked step remains an idempotent no-op without a verdict file. A saved
+`Grading: self-graded` PASS can tick on a host without subagents; it does not claim
+independent verification.
+
+Deterministic check output can be reused only for the same check and predicate,
+with identical command and cwd on a proven-identical clean tree and unchanged tool,
+dependency and config inputs.
+For software, this includes the same HEAD and clean status plus the per-check
+evidence bundle in both verdicts. A fresh verifier cites the source output and
+grades each stage; missing proof requires a re-run. Live CI, external state and
+timing-sensitive repeats always run again. See the
+[verifier contract](skills/planning/references/verifier-contract.md#evidence-reuse).
+
+Runtime references are planning's
+[principles catalog](skills/planning/references/principles.md),
+[playbook index](skills/planning/references/playbooks.md) and selected playbook files,
+and [verifier contract](skills/planning/references/verifier-contract.md).
+Principles apply at named decision points: resume, research, triage, scope checks,
+FAIL/re-plan and numerical claims. Log a principle only when it changes a choice;
+the catalog does not become the project constitution. Selected playbooks may add
+bounded Run rules, read before starting or resuming and followed throughout; an
+absent slot means none. Planning owns the full
+[After Proceed directive](skills/planning/SKILL.md#implement); commands and approval
+output point there instead of carrying another copy. `rationale.md` is editing-only,
+read when editing or considering an override.
 
 ## Where a new rule goes (skill authoring convention)
 
@@ -150,8 +214,8 @@ So, when adding or amending a rule in a `SKILL.md`:
   alternatives that look right and are not, the measured cost. Give it a `## ` heading
   and point at it from `SKILL.md` by name (`references/rationale.md` → **Heading**), not
   by line number.
-- **Reference files are read only when editing the skill**, or when a rule looks wrong
-  and someone is about to change it. They are not part of the skill's own context.
+- **`references/rationale.md` is editing-only**, read when editing or questioning a rule.
+  Runtime references such as planning's `references/principles.md` and `references/verifier-contract.md` load at the decision points the skill names.
 
 This applies to automated contributors too: a `/loom:learn` cycle that harvests a new
 rule from a session should append the narrative to `references/rationale.md`, not to
@@ -162,7 +226,8 @@ land as skill prose or `references/rationale.md` — never as new hooks, new scr
 state tokens, or new `plan-state.sh` subcommands.** (v6.0.0's Stop hook/run marker and
 v6.3.0's plan-file pointers/hash commands are sanctioned exceptions, added by human-approved plans that amended the charter first —
 the route any future machinery takes too.) A new domain's know-how lands as a new
-`playbook-<name>` skill, never as domain text in `planning`. A lesson that seems to need machinery
+indexed reference under `skills/planning/references/playbooks/`, never as domain text
+in `planning/SKILL.md`. A lesson that seems to need machinery
 goes in as prose plus a proposal for the user to decide on;
 `hooks/tests/test-hook-roster.sh` fails the build if machinery lands anyway.
 
@@ -184,7 +249,7 @@ State is **project-scoped** — `<repo>/.mentor/`, with one dir per plan topic:
 │   └── <slug>/      #   plan.md (+ ## Goal check, ## Decision log, ## Done review)
 │       ├── .state.json # lifecycle state + relations + plan_sha256 — written only by plan-state.sh
 │       ├── evidence/   # v6: captured logs, screenshots, probe scripts (the run)
-│       └── step-N-verify.md · topic-N-verify.md · goal-verify.md  # verifier verdicts
+│       └── verdicts/   # caller saves returned blocks: step-N.md · topic-N.md · goal.md · pr.md
 └── reviews/         # /mentor:preview pages — <subject-slug>/review.html (+ _ids.md,
                      #   _plan.md, _brief.md, _trace.md, _built.md, _parts/,
                      #   shots/)                                           ← gitignored
@@ -199,6 +264,9 @@ Data older versions wrote — `handoffs/` and `tours/` dirs, deferred plan stubs
 `mode`/`dispatch` keys in `config.json` — is left on disk as it is; v5.0.0 reads none of it.
 Split groups from the removed `plan-split` skill keep reading correctly: `group`, `order`
 and `superseded` are still parsed (v6.0.0).
+Released verdict paths `step-N-verify.md`, `topic-N-verify.md`, and `goal-verify.md`
+remain readable when their canonical `verdicts/` file is missing. The latest step grade
+overwrites `verdicts/step-N.md`; readers never search `-rK` files.
 
 ## Plan state
 
@@ -432,7 +500,7 @@ Knobs — env vars under `env` in `~/.claude/settings.json` (or the project's
 | `commands/plan.md` | The `/mentor:plan` trigger. |
 | `hooks/begin-plan.sh` | Arms (unless the `<slug>` argument names a plan already `approved`/`in_progress` and owned here or unowned — then it prints `ALREADY APPROVED: <slug>` and arms nothing) **this worktree's own** `.planning.<wt-id>` marker (v2.23.0; closes the gate for this worktree only — an optional `<slug>` argument WARNs if that slug is already owned by a live sibling worktree); prunes stale sibling markers with a per-marker notice; refuses over a live legacy `.planning` (distinct refusal message); prints any live siblings as informational "also armed elsewhere" lines — and a `CONTEXT:` line (`WARN`, or `HIGH` at/over the limit: `context_block_tokens`, or 65% of a known window when that is lower — warn-only; the gate arms either way). A foreign-marker refusal (a DIFFERENT, still-live session owns this worktree's own marker) names the supported recovery: re-run with `--override-foreign-marker` once the user explicitly authorizes it — the flag re-arms past the guard and still prints who it overrode; it is the confirmed-override route, never a way to skip the confirm itself. |
 | `hooks/plan-gate.sh` | **The one gate.** Fail-closed `PreToolUse` on Write/Edit/MultiEdit/NotebookEdit — denies in-repo writes while THIS worktree's own marker or the legacy repo-wide marker exists, even under `bypassPermissions`; a live sibling worktree's marker never denies here. Mentor's own `.mentor/` tree (where the plan file lives) is exempt, so the plan is always writable. Stale markers (>8h) self-heal on a would-deny write, each with a named notice. |
-| `hooks/approve-plan.sh` | Re-anchors approval with a fresh disk read: the plan path, a drift notice when changed, and `planning ended — edit gate released`; without `--deliver` it also names the next step and the instruction to tick each step after its PASS row. Validates the plan (non-empty `.md` **newer than the marker**), releases this worktree's gate, and on Proceed (no flag) writes the run marker `.mentor/.run-<session_id>` (`slug=` + `started=`) when a session id is known. Promotes only plans **owned** by this worktree (or unowned, when no sibling marker is live) — never a sibling's in-flight draft; a live legacy marker only sweeps repo-wide when the approving session is the one that armed it. The approval sweep skips non-primary drafts that are still skeletons (no `## Goal check` or no implementation steps), preserving their sidecars. Flags map to the approval options: no-arg starts the run, `--deliver` (no run marker) prints the deliverable soft-stop (also printed on a re-run when the gate is already open); unknown flags — including the retired `--handoff` — are rejected. |
+| `hooks/approve-plan.sh` | Re-anchors approval with a fresh disk read: the plan path, a drift notice when changed, and `planning ended — edit gate released`; without `--deliver` it also names the next step and the pointer to planning’s full run directive and the order save `verdicts/step-N.md` → PASS row → `record-write` → tick. Validates the plan (non-empty `.md` **newer than the marker**), releases this worktree's gate, and on Proceed (no flag) writes the run marker `.mentor/.run-<session_id>` (`slug=` + `started=`) when a session id is known. Promotes only plans **owned** by this worktree (or unowned, when no sibling marker is live) — never a sibling's in-flight draft; a live legacy marker only sweeps repo-wide when the approving session is the one that armed it. The approval sweep skips non-primary drafts that are still skeletons (no `## Goal check` or no implementation steps), preserving their sidecars. Flags map to the approval options: no-arg starts the run, `--deliver` (no run marker) prints the deliverable soft-stop (also printed on a re-run when the gate is already open); unknown flags — including the retired `--handoff` — are rejected. |
 | `hooks/plan-open.sh` | Records the Write/Edit hash through `record-write` before opener-off or already-open exits. Auto-opens the Markdown plan for review the first time it is written (VSCode tab / OS default). When the plan has a review page (`.mentor/reviews/<slug>/review.html`), every Write/Edit of the plan also returns a reminder to regenerate the page's changed sections (`previewing` §7) before the turn ends. `previewing` opens its own page. |
 | `hooks/context-gate.sh` | **Per-prompt plan pointer (Claude Code).** While this worktree has an armed draft (a stored `draft` owned by this worktree and newer than the gate) or this session has a run, prints the plan path, stored state, next step and drift notice when changed, including alongside all context-warning tiers. Every stored draft shows `next: drafting`; a run shows `step N/M` or `goal check`. With an armed gate but no such draft, prints `mentor plan: no plan file yet · it is created at research start (planning Step 2)`. **Context gate.** `UserPromptSubmit` — measures live context from the transcript: warns (~200k, or 50% of a known window when that is lower; re-arming on growth), re-warns near the limit, and warns `CONTEXT: HIGH` at the limit (~350k, or 65% of a known window when that is lower) — thresholds from `mentor_context_limits`, warn-only, never a question or a handoff steer. Since v2.34.0 it also carries the **planning-intent nudge** as its tier-2 output — an anchored opener ("help me plan…", "let's plan…") suggests `/mentor:plan <topic>` so a conversational planning ask doesn't silently skip the edit gate (`hooks/tests/test-planning-nudge.sh` covers it). Never blocks or erases prompts. Fail-soft; slash commands always pass. |
 | `hooks/context-checkpoint.sh` | **Context checkpoint** (v2.37.0). `PostToolBatch` — the reading `context-gate.sh` cannot take: that gate is `UserPromptSubmit`-only, so any long autonomous stretch that collapses N human turns into one got zero readings in between (one real session grew ~247k tokens unseen). Fires the same WARN/WARN-HIGH/HIGH tiers between tool batches, rate-limited by its own `.context-checkpoint-<session_id>` marker (speaks on a tier rise or one re-arm step of growth: ~50k tokens, or 10% of a known window). **Advisory only, by ruling — never exit 2** (which would kill the agentic loop mid-step); every tier is a one-line size warning ending in the gate's progress-first sentence, never a handoff steer. Kill switches: the gate's own, plus `MENTOR_CONTEXT_CHECKPOINT=off` / `"context_checkpoint":"off"`. |
@@ -540,7 +608,8 @@ Plans are single self-contained **Markdown** documents — Mermaid-first
 (` ```mermaid ` flowchart/sequence/ER/state), with GFM tables, ASCII diagrams,
 and GFM alerts. Portable: renders richly on GitHub/GitLab and any Mermaid-capable
 viewer. One visualization per significant change, never two representations of
-one thing. Since v6.0.0 a plan also carries `## Playbook` (the runtime pick, or `none`),
+one thing. New plans carry a plan-level `Goal:` below the title and Rev lines, and
+every step's `Goal:` names the scenarios it serves. Since v6.0.0 a plan also carries `## Playbook` (the runtime pick, or `none`),
 `## Goal check` (the done predicate), and a flat `## Decision log`
 (`# · use case · decision · why · evidence · result · review?`); the run appends
 `## Done review`, where the log is rendered grouped by use case with `review?: needed` rows
@@ -575,6 +644,41 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
 
+## Changes in v6.4.0
+
+Compatibility decision: **minor release by owner decision; two public playbook skills are removed.**
+`playbook-software-change` and
+`playbook-retrospective` leave the public skill list. Mentor exposes seven public
+skills and five planning-owned runtime playbooks: software-change, retrospective,
+investigation, hillclimb and prototype. Invoke planning for these goals; released
+plan selections still resolve through index aliases in either `## Playbook` format.
+No hidden compatibility skills or durable-data rewrite are needed.
+
+- **Verdict-gated ticks.** Save the latest `verdicts/step-N.md` → PASS row →
+  `record-write` → tick. A new tick reads the saved PASS once; canonical files take
+  precedence. Released legacy verdict paths, optional headers and leading comments,
+  and historical tick idempotency stay supported, including the labelled
+  `self-graded` fallback when subagents are unavailable.
+- **Roles and goals.** Resolve agents by described purpose, honoring explicit session
+  mappings first. Every brief opens with the plan-level `Goal:`; draft steps trace to
+  scenarios. The full run directive lives only in planning.
+- **Evidence reuse.** Fresh graders can cite prior deterministic output only for the
+  same check and predicate, with identical command and cwd on a proven-identical
+  clean tree and unchanged inputs with complete evidence. Re-run live CI,
+  external-state checks and timing-sensitive repeats.
+- **Principles and Run rules.** Apply the runtime principles catalog at named decision
+  points and log only choices it changes. Indexed playbooks supply bounded optional
+  Run rules; rationale remains editing-only. Investigation delivers a read-only cited
+  answer, hillclimb requires its target and minimum attempts within caps, and prototype
+  delivers observed variants for the human to pick without shipping prototype code.
+- **Both hosts and isolated live evals.** Portable skills retain serial fallbacks;
+  hooks, subagents and command facades depend on the adapter. Deterministic contract
+  tests cover bundled references and released readers. Live selection evals stage the
+  candidate skills and fixture in private workspaces, testing positive and negative
+  playbook selection. Claude disables inherited instructions and memory and checks
+  its init inventory for contamination; Codex uses ephemeral read-only sessions.
+  See [evals](evals/README.md) for the separate live commands and isolation details.
+
 ## Changes in v6.3.0
 
 **The plan stays attached through its lifecycle.** Research starts with a plan-file
@@ -587,7 +691,7 @@ a Rev line. On every host, `record-write`, `drift` and `tick` maintain the optio
   and next step, including alongside context warnings. Every stored draft shows
   `next: drafting`; with an armed gate but no such draft, the pointer says
   `mentor plan: no plan file yet · it is created at research start (planning Step 2)`.
-- **Approval re-anchor.** Approval reads the file fresh and names its path, change notice when needed and released gate; Proceed also names the next step and the instruction to tick after each PASS.
+- **Approval re-anchor.** Approval reads the file fresh and names its path, change notice when needed and released gate; Proceed also names the next step and the order save `verdicts/step-N.md` → PASS row → `record-write` → tick.
   The approval sweep skips non-primary drafts that are still skeletons (no
   `## Goal check` or no implementation steps), preserving their sidecars.
 - **SessionStart re-attachment (Claude Code).** Startup, resume, clear, compact and fork
@@ -686,8 +790,7 @@ pausing only for always-pause actions and logging every decision for review.**
   `playbook-software-change`, which supplies research directives, the Definition of done,
   extra always-pause items, the deliver mode (`shipping` → `merging`), and evidence kinds.
 - **Triage before asking.** Planning Step 3 has four buckets — answer from the material, run
-  an experiment, ask a decision-maker agent (system / ux / general, general-purpose
-  fallback), or, only for a product call, ask you. Grilling uses the same triage and runs
+  an experiment, resolve a decision-maker by described purpose (planning → Role resolution), or, only for a product call, ask you. Grilling uses the same triage and runs
   before approval only; its trivial-implement branch is gone.
 - **New plan sections.** `## Goal check` (the done predicate), a flat `## Decision log`
   (`# · use case · decision · why · evidence · result · review?`), and `## Playbook`. The
@@ -701,7 +804,8 @@ pausing only for always-pause actions and logging every decision for review.**
   after 8h, off switch `MENTOR_CONTINUE=off`). Paused = `approved` + `paused: row N` note.
 - **Independent grader.** `skills/planning/references/verifier-contract.md` (revived from
   v4's dispatch-agents) grades every step, every Verification topic, the Goal check, and the
-  PR before a merge. A step is ticked only after a PASS row. Hosts without subagents label
+  PR before a merge. The step order is save
+  `verdicts/step-N.md` → PASS row → `record-write` → tick. Hosts without subagents label
   their grades `self-graded`.
 - **Constitution as the autonomy contract.** New sections Always-pause list, Decision
   authority, Definition of done, and a built-in general always-pause default.
@@ -2159,7 +2263,7 @@ The `grilling` (`/mentor:grill`) skill is adapted from
 to fit mentor's conventions, namespacing, and gates. A handoff skill adapted from the same set
 shipped until v5.0.0.
 
-The `playbook-retrospective` skill (`/mentor:retro`) is inspired by Cursor's
+Planning's retrospective playbook (`/mentor:retro`) is inspired by Cursor's
 [pstack](https://github.com/cursor/plugins/tree/main/pstack) plugin and its `/reflect`
 command — the three-reviewer-over-one-session pattern and the Accepted / Rejected / Backlog
 synthesis. mentor's port runs inside its own core concept (approve once, run to a done-check),

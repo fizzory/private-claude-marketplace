@@ -1,0 +1,221 @@
+{
+  "source": "grader run-claude-e85e8e8bd4f0/case-85-rep-0",
+  "projection": "Recorded #85 selection-format failure. Original line numbers, inventories, tool calls, completed results, assistant text and completion retained. Native Read results retain their first non-empty returned line from the original transcript; partial streams, telemetry, injected skill text and remaining file bodies omitted.",
+  "id": 85,
+  "root": "/private/var/folders/ww/vjdjm2xx1zjccbpdhs2nkhsr0000gp/T/tmp.DFtde9cclm/run-claude-e85e8e8bd4f0/case-85-rep-0/project",
+  "actual_picks": [
+    "planning"
+  ],
+  "read_paths": [
+    "planning/references/playbooks.md",
+    "planning/references/playbooks/retrospective.md"
+  ],
+  "events": [
+    {
+      "line": 1,
+      "event": {
+        "type": "system",
+        "subtype": "init",
+        "skills": [
+          "constitution-authoring",
+          "frontend-self-ex-review",
+          "grilling",
+          "merging",
+          "planning",
+          "previewing",
+          "shipping",
+          "deep-research",
+          "design",
+          "design-sync",
+          "dataviz",
+          "update-config",
+          "verify",
+          "debug",
+          "code-review",
+          "simplify",
+          "batch",
+          "fewer-permission-prompts",
+          "doctor",
+          "loop",
+          "schedule",
+          "claude-api",
+          "workflow-authoring",
+          "run",
+          "run-skill-generator",
+          "plugin-authoring"
+        ],
+        "agents": [
+          "claude",
+          "Explore",
+          "general-purpose",
+          "Plan",
+          "statusline-setup",
+          "web-fetch"
+        ],
+        "plugins": [
+          {
+            "name": "cc-plugin-sec-default",
+            "path": "builtin",
+            "source": "cc-plugin-sec-default@builtin"
+          },
+          {
+            "name": "cc-plugin-agents-md",
+            "path": "builtin",
+            "source": "cc-plugin-agents-md@builtin"
+          },
+          {
+            "name": "cc-plugin-telemetry",
+            "path": "builtin",
+            "source": "cc-plugin-telemetry@builtin"
+          },
+          {
+            "name": "cc-plugin-privacy",
+            "path": "builtin",
+            "source": "cc-plugin-privacy@builtin"
+          },
+          {
+            "name": "cc-plugin-plugin-authoring",
+            "path": "builtin",
+            "source": "cc-plugin-plugin-authoring@builtin"
+          }
+        ],
+        "mcp_servers": []
+      }
+    },
+    {
+      "line": 19,
+      "event": {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_01Vcw7tKjWqrNGGW4cmLRHwC",
+              "name": "Skill",
+              "input": {
+                "skill": "planning",
+                "args": "Plan a retrospective of this finished agent session and turn its repeated manual steps into local reusable skills; report the remaining proposals."
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "line": 21,
+      "event": {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_01Vcw7tKjWqrNGGW4cmLRHwC"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "line": 35,
+      "event": {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "Not resumed; need playbooks index and matching file."
+            }
+          ]
+        }
+      }
+    },
+    {
+      "line": 64,
+      "event": {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_017YGtwFTEoMcnjf33MkAQHF",
+              "name": "Read",
+              "input": {
+                "file_path": "/private/var/folders/ww/vjdjm2xx1zjccbpdhs2nkhsr0000gp/T/tmp.DFtde9cclm/run-claude-e85e8e8bd4f0/case-85-rep-0/project/.claude/skills/planning/references/playbooks.md"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "line": 66,
+      "event": {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_017YGtwFTEoMcnjf33MkAQHF",
+              "content": "1\t# Playbook index"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "line": 98,
+      "event": {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "tool_use",
+              "id": "toolu_01UiFctPk74GG6W3d2o6CCLk",
+              "name": "Read",
+              "input": {
+                "file_path": "/private/var/folders/ww/vjdjm2xx1zjccbpdhs2nkhsr0000gp/T/tmp.DFtde9cclm/run-claude-e85e8e8bd4f0/case-85-rep-0/project/.claude/skills/planning/references/playbooks/retrospective.md"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "line": 102,
+      "event": {
+        "type": "user",
+        "message": {
+          "content": [
+            {
+              "type": "tool_result",
+              "tool_use_id": "toolu_01UiFctPk74GG6W3d2o6CCLk",
+              "content": "1\tOverlay a mentor plan run loads when the requested goal is a retrospective of one"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "line": 180,
+      "event": {
+        "type": "assistant",
+        "message": {
+          "content": [
+            {
+              "type": "text",
+              "text": "I picked the **planning** skill because you asked for a retrospective of a finished session. In its playbook index this request matches the **retrospective** playbook. Its deliverable is lessons from one finished agent session, applied as local skill changes, with the remaining proposals reported.\n\n- **Who delivers:** the retrospective playbook alone. It doesn't combine with the software-change playbook, which ships code. Here the edits stay local, with no commit, push or merge. Proposals that would change the constitution, a plugin's core concept, or another tool's config are never applied; they go into the final report as leftovers.\n- **History to re-check:** none. This is a new plan, not a resumed one, so there are no earlier steps whose claims need re-checking.\n- **Not done yet:** I stopped at this selection point. I haven't checked the edit gate, created any plan files, rebuilt the session from disk or run the review passes, and nothing was approved or edited.\n\nEVALATION_PLACEHOLDER"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "line": 185,
+      "event": {
+        "type": "result",
+        "subtype": "success",
+        "is_error": false
+      }
+    }
+  ]
+}

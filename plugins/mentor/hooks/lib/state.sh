@@ -889,6 +889,8 @@ mentor_plan_goal_line() {
 # returns 1 — the caller decides whether that is worth surfacing. No write happens
 # on any failure path, including a mid-write error, since the rewritten file is
 # only moved into place after a full, successful pass over the input.
+# A new tick also requires a saved PASS verdict; refusal returns 1 with the file
+# and fix on stderr, no status on stdout. Already-ticked steps skip that read.
 mentor_plan_tick_step() {
   local md="${1:-}" n="${2:-}"
   if [ -z "$md" ] || [ ! -f "$md" ]; then echo "no-such-step 0"; return 1; fi
@@ -940,7 +942,41 @@ mentor_plan_tick_step() {
   fi
   case "$status_line" in
     already\ *) rm -f "$tmp" ;;   # unchanged — discard the rewritten-but-identical copy
-    *)          mv "$tmp" "$md" ;;
+    *)
+      # Read the latest canonical grade at the point of the write. A present but
+      # invalid canonical file never falls back to legacy or revision files.
+      local verdict="$(dirname "$md")/verdicts/step-${n}.md" reason=""
+      if [ ! -e "$verdict" ] && [ ! -L "$verdict" ]; then
+        local legacy="$(dirname "$md")/step-${n}-verify.md"
+        if [ -e "$legacy" ] || [ -L "$legacy" ]; then verdict="$legacy"; fi
+      fi
+      if [ ! -e "$verdict" ]; then reason="missing verdict"
+      elif [ ! -f "$verdict" ] || [ ! -r "$verdict" ]; then reason="verdict is not a readable file"
+      elif [ ! -s "$verdict" ]; then reason="empty verdict"
+      elif reason="$(awk -v target="$n" '
+        function trim(s) { sub(/^[[:space:]]+/, "", s); sub(/[[:space:]]+$/, "", s); return s }
+        /^[[:space:]]*Verdict:/ && !seen {
+          seen = 1; verdict = $0; sub(/^[[:space:]]*Verdict:/, "", verdict); verdict = trim(verdict)
+        }
+        tolower($0) ~ /^[[:space:]]*grade:/ {
+          grade = tolower($0); sub(/^[[:space:]]*grade:/, "", grade); grade = trim(grade)
+          if (grade != "step " target && grade != "step-" target) mismatch = 1
+        }
+        END {
+          if (!seen) print "missing or malformed Verdict: line"
+          else if (verdict != "PASS") print "first Verdict: line is not PASS"
+          else if (mismatch) print "Grade: does not name Step " target
+        }
+      ' "$verdict" 2>/dev/null)"; then :
+      else reason="could not read verdict"; fi
+      if [ -n "$reason" ]; then
+        rm -f "$tmp"
+        echo "[mentor plan-state] tick: ${verdict}: ${reason}." >&2
+        echo "  Fix: save the latest step ${n} grade in this file with its first Verdict: line exactly 'Verdict: PASS'; any Grade: header must name 'Step ${n}' or 'step-${n}', then retry tick." >&2
+        return 1
+      fi
+      mv "$tmp" "$md"
+      ;;
   esac
   echo "$status_line"
   return 0

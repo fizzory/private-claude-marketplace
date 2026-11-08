@@ -1,24 +1,14 @@
----
-name: playbook-retrospective
-description: >
-  Retrospective overlay a mentor plan run loads at planning Step 2 when the goal is a
-  retrospective of a finished agent session; it never plans or approves on its own. It
-  produces new skills, skill-body edits and description tunes, plus proposals it reports
-  but does not apply. Turn a session into lessons: "retro", "retrospective", "reflect on
-  this session", "lessons learned", "what should become a skill", "turn what I keep doing
-  into a skill", "lessons from today's session", "look back over what we did", "worth
-  saving as a reusable skill or a tweak to an existing one". Use it even when the thread
-  looks empty, short, or compacted — the retro rebuilds the session from its transcript
-  on disk, not from memory. For the current or one named session, prefer it over a batch
-  harvester. On Claude Code the facade is "/mentor:retro". NOT for batch harvesting
-  across many sessions (loom), NOT for changing code in a repo (playbook-software-change),
-  and NOT for an ordinary plan (planning).
----
+Overlay a mentor plan run loads when the requested goal is a retrospective of one
+finished agent session. It rebuilds the session from disk, even after compaction,
+and delivers local skill changes plus unapplied proposals. Planning owns the one
+approval and the run; batch harvesting across sessions belongs to loom, and a
+forward code-change goal belongs to the software-change playbook.
 
 # Playbook — retrospective
 
-Why these rules read as they do — including what was ported from pstack and deliberately
-altered — is in `references/rationale.md` → **What was changed, and why**.
+Editing-only rationale — including what was ported from pstack and deliberately
+altered — is in [retrospective/rationale.md](retrospective/rationale.md) →
+**What was changed, and why**. Read it when editing or questioning a rule.
 
 ## Host portability
 
@@ -26,18 +16,17 @@ Use a structured question UI when the host offers one; otherwise ask the same fo
 
 Planning's general flow never names transcripts, lenses, or skill authoring. This
 playbook is where those live. Planning loads it when the goal is a retrospective,
-records `## Playbook: playbook-retrospective` plus a decision-log row, and reads the
+records `## Playbook: retrospective` plus a decision-log row, and reads the
 five overlays below. Nothing here replaces a planning rule; each overlay fills a slot
 the general flow leaves open. This playbook is **never co-loaded with
-`playbook-software-change`** — a retro delivers local edits, it does not ship code.
+`software-change`** — a retro delivers local edits, it does not ship code.
 
-## Direct invocation
+## Planning entry
 
-Triggered directly (a "retro"/"reflect on this session" ask, or on Claude Code
-`/mentor:retro`), hand to planning with the goal `retrospective of session <id>` so
-the run inherits the edit gate, the one approval, the decision log, the independent
-verifier, and the Done review — because a retro that applied skill edits without that
-gate would mutate skills before the user approved them.
+Natural-language retrospective requests and Claude Code's `/mentor:retro` facade
+enter planning with the goal `retrospective of session <id>`. Planning reads this
+reference through its index and owns the edit boundary, one approval, decision log,
+independent verifier and Done review, so skill edits wait for the approved plan.
 
 ## The five overlays
 
@@ -46,17 +35,17 @@ gate would mutate skills before the user approved them.
 Build the evidence graph, then run the lenses, then synthesize. The reviewers are
 read-only; the **parent** persists each returned output immediately under `evidence/`:
 
-1. Follow `references/evidence-graph.md` to write `evidence/manifest.json` and one
+1. Follow [retrospective/evidence-graph.md](retrospective/evidence-graph.md) to write `evidence/manifest.json` and one
    digest per transcript. The session is rebuilt from disk, never from memory, because
    after compaction the parent's context holds only the latest summary.
-2. Dispatch the three lenses — `references/lens-judgment.md`,
-   `references/lens-tooling.md`, `references/lens-divergent.md` — as native subagents,
+2. Dispatch the three lenses — [retrospective/lens-judgment.md](retrospective/lens-judgment.md),
+   [retrospective/lens-tooling.md](retrospective/lens-tooling.md), [retrospective/lens-divergent.md](retrospective/lens-divergent.md) — as native subagents,
    in parallel when the host has them, else serially in-thread and labelled
    `self-graded`. Each lens returns its output read-only; the parent writes that return
    verbatim to `evidence/lens-judgment.md` / `evidence/lens-tooling.md` /
    `evidence/lens-divergent.md` the moment it lands. On restart the parent skips any
    lens whose evidence file already exists.
-3. Run `references/synthesizer.md`; it returns the synthesis read-only and the parent
+3. Run [retrospective/synthesizer.md](retrospective/synthesizer.md); it returns the synthesis read-only and the parent
    writes it verbatim to `evidence/synthesis.md` (Coverage, Accepted, Rejected,
    Backlog, Leftovers), skipped on restart if that file already exists.
 

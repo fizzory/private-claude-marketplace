@@ -40,8 +40,9 @@
 #       (idempotent — already-ticked is a no-op) — replaces hand-rolling an Edit to
 #       find and mark that exact line, whose placement is load-bearing (a tick on
 #       the wrong line reads as the step never having started). No such step at N →
-#       fails loud, no write. Reports drift before editing, then records the new
-#       hash on success. The tick itself still works without jq or a sha256 tool.
+#       fails loud, no write. New ticks require a saved PASS verdict (canonical,
+#       else legacy); refusal names the file and fix. Reports drift before editing,
+#       then records the new hash on success. Tick still works without jq or sha256.
 #
 #   record-write <slug>
 #       Record plan.md's current sha256, preserving every other sidecar key.
@@ -216,7 +217,8 @@ Usage: plan-state.sh <subcommand>
                                          ## Goal check + ## Decision log, Rev-note order,
                                          stray ✅ / ### inside the steps section) + a folded CONTEXT
                                          read, as CHECK: lines; exit 1 iff a GATING check fails
-                                         (Rev-order, context, stray ✅ and ### are informational)
+                                         (Rev-order, context, stray ✅, ### and untraced steps
+                                         in a stored draft are informational)
   list [--group G] [--owners]           every plan with its effective state (--owners adds OWNER)
   current [--any]                       the current plan, owned-by-this-worktree scoped (group-aware);
                                          --any for a deliberate repo-wide read
@@ -837,7 +839,7 @@ tick_reconciliation_reminder() {
   [ "${total:-0}" -gt 0 ] || return 0
   [ "${ticked:-0}" -lt "${total:-0}" ] || return 0
   echo "[mentor plan-state] WARNING: ${plan_dir##*/} closed 'implemented' with only ${ticked}/${total} steps ticked." >&2
-  echo "  Tick the steps that actually passed with a verifier PASS row (plan-state.sh tick ${plan_dir##*/} <N>), or tell the user which are closing untracked and why." >&2
+  echo "  For each passed step: save the returned verdict to verdicts/step-N.md, append its PASS row, record-write, then tick (plan-state.sh tick ${plan_dir##*/} <N>), or tell the user which are closing untracked and why." >&2
   return 0
 }
 
@@ -1201,8 +1203,12 @@ case "$sub" in
         already) echo "[mentor plan-state] ${slug}: step ${step} was already ✅ (${tick_n}/${tick_total}) — no write." ;;
       esac
     else
-      read -r _ tick_total <<<"$tick_result"
-      echo "[mentor plan-state] tick: ${slug} has no step ${step} (plan.md has ${tick_total:-0} step(s) in '## Implementation steps'). No write." >&2
+      # Verdict refusals already name the file and fix on stderr; only the
+      # helper's existing no-such-step result needs a CLI diagnostic here.
+      if [[ "$tick_result" == no-such-step\ * ]]; then
+        read -r _ tick_total <<<"$tick_result"
+        echo "[mentor plan-state] tick: ${slug} has no step ${step} (plan.md has ${tick_total:-0} step(s) in '## Implementation steps'). No write." >&2
+      fi
       exit 1
     fi
     ;;
@@ -1390,7 +1396,7 @@ case "$sub" in
   # mandated in SKILL.md:447-460 prose, backed by nothing until now; the third is
   # documented at its implementation below. The rest print as informational CHECK:
   # lines and never fail verify (a stray ✅ and an `###` inside the steps section,
-  # both documented below, plus):
+  # both documented below, plus untraced steps in a stored draft):
   # Rev-note order (the plugin's content spec does not mandate a Rev-note changelog
   # at all, so flagging its ABSENCE would be a false-positive machine; when Rev
   # lines DO exist this only reports a non-monotonic sequence, it never blocks) and
@@ -1475,6 +1481,26 @@ case "$sub" in
       echo "CHECK: step body INCOMPLETE — no Done when: under:"
       printf '%s\n' "$v_nodw" | sed 's/^/  line /'
       v_fail=1
+    fi
+    # Traceability is a drafting aid, never a gate or a retrofit of released data.
+    # Reuse the shared scanner's body boundaries; only a Goal line can trace a step.
+    if [ "$(mentor_plan_state_stored "${plans_dir}/${slug}")" = "draft" ]; then
+      awk -F'\t' '
+        NR == FNR {
+          if ($1 == "STEP") {
+            total = $2
+            for (line = $3 + 1; line <= $4; line++) step_at[line] = $2
+          }
+          next
+        }
+        step_at[FNR] && /^[[:space:]]*(-[[:space:]]+)?([*][*])?Goal:([*][*])?[[:space:]]/ {
+          if (index($0, "serves S") > 0) traced[step_at[FNR]] = 1
+        }
+        END {
+          for (step = 1; step <= total; step++)
+            if (!traced[step]) printf "CHECK: untraced step %d\n", step
+        }
+      ' <(printf '%s\n' "$v_scan") "$plan_md" || true
     fi
     # v6.0.0: a plan still being written (effective draft/unknown) must carry the two
     # sections the run reads — `## Goal check` (what "done" is) and `## Decision log`

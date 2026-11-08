@@ -1,7 +1,7 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "mentor",
-  "version": "6.3.0",
+  "version": "6.4.0",
   "description": "Plan-first agent workflow: approve a plan once, then mentor runs it to a verified done-check, pausing only for always-pause actions and logging every decision for review.",
   "author": {
     "name": "NTBX"

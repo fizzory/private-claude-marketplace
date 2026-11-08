@@ -6,7 +6,7 @@ description: >
   green — with the user's explicit go-ahead unless the constitution grants merge
   authority, then walk the runbook's after-merge steps. User-invoked via /mentor:merge
   after /mentor:ship (or for any open PR on the current branch, mentor-made or not),
-  and by playbook-software-change at the end of a plan run. Use when the user says "watch the PR and
+  and by planning's software-change playbook at the end of a plan run. Use when the user says "watch the PR and
   merge when green", "check CI and merge", "merge if checks pass", or "is this failure
   even mine". GitHub-only (needs gh); one bounded watch, one rerun max, never a
   busy-poll loop.
@@ -146,8 +146,14 @@ Then decide:
 Before any merge is offered, dispatch one fresh verifier per
 `planning/references/verifier-contract.md` (the **Merge** row): the PR diff
 (`gh pr diff <number>`), the plan path when a plan matches the branch (Step 5's slug
-match), and its `## Goal check`. The builder never grades its own PR. Its verdict rides
-into Step 4's question:
+match), and its `## Goal check`. Use the host's verifier role settings and wait for
+the verdict; inside a plan run, save the returned block verbatim to `verdicts/pr.md`
+with the contract's grading and family headers. This keeps the merge grade available
+to a resumed run. Standalone merging keeps its existing reporting without creating
+a plan verdict file. Apply the contract's **Evidence reuse** rule only after recording
+and comparing the PR base commit, diff and grading criteria with the source verdict;
+all three must match. This keeps reused evidence tied to the PR being merged.
+The builder never grades its own PR. Its verdict rides into Step 4's question:
 
 - **PASS** → offer the merge, quoting the verdict's one-line summary.
 - **FAIL** → do not offer *Merge now*; report the `[GOAL]` gaps and leave the PR open.

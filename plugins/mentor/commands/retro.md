@@ -10,7 +10,7 @@ You are entering the mentor retrospective. It rebuilds a finished session from
 disk, runs three lenses and a synthesizer over it, and turns the approved
 findings into skill changes. It is a thin facade over the same gated plan flow
 `/mentor:plan` uses: the retro IS a mentor plan whose playbook is
-`playbook-retrospective`, so it inherits the one approval, the decision log, the
+`retrospective`, so it inherits the one approval, the decision log, the
 independent verifier, and the Done review — no new gate, no new state.
 
 Do these in order:
@@ -68,10 +68,10 @@ Do these in order:
    cutoff you named:
 
    > Retrospective of session `<id or path>` with `<--until/--claude-config/--codex-home/--agt-home
-   > values from $ARGUMENTS, if any>` — load `playbook-retrospective`
+   > values from $ARGUMENTS, if any>`
 
-   Name `playbook-retrospective` explicitly so planning selects it at its Step 2 playbook
-   pick. The retro playbook is **never co-loaded with `playbook-software-change`**: a
+   Planning reads `skills/planning/references/playbooks.md` and selects the
+   `retrospective` reference at Step 2. It is **never co-loaded with `software-change`**: a
    retrospective is not a code-change goal, so planning loads the retro playbook alone.
    Then follow planning end to end — its one approval, its run loop, its Done review.
 

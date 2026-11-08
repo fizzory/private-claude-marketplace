@@ -1,16 +1,8 @@
----
-name: playbook-software-change
-description: >
-  Software overlay for a mentor plan run: what research, "done", always-pause items,
-  delivery, and evidence mean when the goal is to change code in a repo — fix a bug,
-  add a feature, refactor, upgrade a dependency, change a test, config, or CI. Loaded
-  by the planning skill at runtime (Step 2) when the goal matches; it is not a
-  workflow of its own and never plans or approves anything itself. Use it whenever a
-  mentor plan's goal is a code change in a git repository. Not for a non-code goal
-  (a report, a brief, research, a doc set outside a codebase), not for a retrospective
-  of a session (that is `playbook-retrospective`), and not to ship or
-  merge by hand — that is /mentor:ship and /mentor:merge directly.
----
+Overlay a mentor plan run loads when the requested goal is a change to a repository's
+code, tests, config, dependencies or CI, such as a bug fix or feature. It supplies
+research, checks, always-pause items, delivery and evidence; it never plans or
+approves independently. Use the retrospective playbook for lessons from a finished
+session, and shipping or merging directly for a standalone delivery request.
 
 # Playbook — software change
 
@@ -20,7 +12,7 @@ Use a structured question UI when the host offers one; otherwise ask the same fo
 
 Mentor's main workflow (`planning`) is general-purpose and never names git, tests,
 CI, or pull requests. This playbook is where those live. Planning loads it when the
-goal is a code change, records `## Playbook: playbook-software-change` plus a
+goal is a code change, records `## Playbook: software-change` plus a
 decision-log row, and reads the five overlays below at the points it names. Nothing
 here replaces a planning rule; each overlay only fills a slot the general flow leaves
 open.
@@ -42,10 +34,17 @@ Before planning completes the plan, find and cite with `file:line`:
 
 - **Goal check**: the repo's own check command(s) pass on the final tree, plus one
   behavioural check per use case scenario (a test that fails before and passes after,
-  or a command whose output shows the new behaviour). Name the exact commands.
+  or a command whose output shows the new behaviour). Include the before/after
+  `git rev-parse HEAD` and `git status --porcelain --untracked-files=all` proof below
+  for the final-tree checks and any reused output. Name the exact commands.
 - **`Done when:`** per step: the bounded check that proves that step — a targeted test,
   a typecheck, a build. End-to-end proof of a running multi-service stack belongs in a
   `## Verification` topic, not a step.
+- **Reuse proof**: apply [the verifier contract](../verifier-contract.md) → **Evidence reuse**.
+  Record the full `git rev-parse HEAD` and `git status --porcelain --untracked-files=all`
+  before and after each check, and repeat this proof when reusing output. All HEADs
+  must match and every status must be empty for reuse; an unchanged HEAD alone hides
+  tracked or untracked edits.
 - **Command hygiene**: a `git diff`/`git log` against a path puts `--` before the path
   (`git log <range> -- <path>`) — without it, a path that later collides with a revision
   name fails the check.
@@ -78,6 +77,14 @@ Replaces planning's general deliver state, in this order:
 The run is `done` when the PR is open and graded (or merged, under a merge grant).
 
 ## 5. Evidence kinds (the Done review)
+
+Record a per-check evidence bundle in every verdict: §2's before/after HEAD and
+status proof; command, cwd, exit code and output; tool, dependency and config inputs;
+verifier identity; and the source verdict path and check citation (`none` for fresh
+output). Preserve the source bundle when reusing, label its output reused, and add
+the current verifier's identity and proof that command and cwd match the source
+verdict and inputs are unchanged. This lets the next stage check provenance without
+trusting a prior PASS.
 
 Per use case scenario, prefer in this order:
 

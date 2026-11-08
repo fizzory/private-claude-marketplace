@@ -1,6 +1,6 @@
 {
   "source": ".mentor/plans/adopt-pstack-autonomy/evidence/eval-step11-run2/case-96-rep-0/transcript.jsonl",
-  "projection": "Original line numbers, inventories, tool calls, shell result bodies and selection marker retained; telemetry, partial events, injected skill text and other result bodies omitted.",
+  "projection": "Original line numbers, inventories, tool calls, shell result bodies and selection marker retained. Native Read results retain their first non-empty returned line from the original transcript; telemetry, partial events, injected skill text and remaining result bodies omitted.",
   "id": 96,
   "root": "/private/var/folders/ww/vjdjm2xx1zjccbpdhs2nkhsr0000gp/T/mentor-trigger-eval/run-claude-fac477c00d5a/case-96-rep-0/project",
   "events": [
@@ -204,7 +204,8 @@
           "content": [
             {
               "type": "tool_result",
-              "tool_use_id": "toolu_017MBTY1SG6bheGgKpHGJtmw"
+              "tool_use_id": "toolu_017MBTY1SG6bheGgKpHGJtmw",
+              "content": "1\t# Playbook index"
             }
           ]
         }
@@ -236,7 +237,8 @@
           "content": [
             {
               "type": "tool_result",
-              "tool_use_id": "toolu_016bM2WRgovSYBGc4bpnAY3s"
+              "tool_use_id": "toolu_016bM2WRgovSYBGc4bpnAY3s",
+              "content": "1\t# Principles catalog"
             }
           ]
         }
@@ -268,7 +270,8 @@
           "content": [
             {
               "type": "tool_result",
-              "tool_use_id": "toolu_018KtvUCaPhvnpGgPLH9nqkW"
+              "tool_use_id": "toolu_018KtvUCaPhvnpGgPLH9nqkW",
+              "content": "1\tOverlay a mentor plan run loads when the requested goal is a change to a repository's"
             }
           ]
         }

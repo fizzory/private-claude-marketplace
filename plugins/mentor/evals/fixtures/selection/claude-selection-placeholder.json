@@ -1,6 +1,6 @@
 {
   "source": "grader run-claude-e85e8e8bd4f0/case-85-rep-0",
-  "projection": "Recorded #85 selection-format failure. Original line numbers, inventories, tool calls, completed results, assistant text and completion retained; partial streams, telemetry and injected skill/file bodies omitted.",
+  "projection": "Recorded #85 selection-format failure. Original line numbers, inventories, tool calls, completed results, assistant text and completion retained. Native Read results retain their first non-empty returned line from the original transcript; partial streams, telemetry, injected skill text and remaining file bodies omitted.",
   "id": 85,
   "root": "/private/var/folders/ww/vjdjm2xx1zjccbpdhs2nkhsr0000gp/T/tmp.DFtde9cclm/run-claude-e85e8e8bd4f0/case-85-rep-0/project",
   "actual_picks": [
@@ -155,7 +155,8 @@
           "content": [
             {
               "type": "tool_result",
-              "tool_use_id": "toolu_017YGtwFTEoMcnjf33MkAQHF"
+              "tool_use_id": "toolu_017YGtwFTEoMcnjf33MkAQHF",
+              "content": "1\t# Playbook index"
             }
           ]
         }
@@ -187,7 +188,8 @@
           "content": [
             {
               "type": "tool_result",
-              "tool_use_id": "toolu_01UiFctPk74GG6W3d2o6CCLk"
+              "tool_use_id": "toolu_01UiFctPk74GG6W3d2o6CCLk",
+              "content": "1\tOverlay a mentor plan run loads when the requested goal is a retrospective of one"
             }
           ]
         }

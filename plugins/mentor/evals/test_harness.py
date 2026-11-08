@@ -75,6 +75,8 @@ class HarnessTests(unittest.TestCase):
         boundary = ' '.join(h.SELECTION_BOUNDARY.split())
         self.assertIn('if planning is selected and no playbook is chosen, use "general"', boundary)
         self.assertIn('use "none" only when planning was not selected', boundary)
+        self.assertIn('History to recheck: []', boundary)
+        self.assertIn('No punctuation, explanation, or unlabeled continuation lines', boundary)
 
     def test_every_case_has_a_passing_synthetic_transcript(self):
         for case in CASES:
@@ -141,22 +143,21 @@ class HarnessTests(unittest.TestCase):
                               and 'Verdict: PASS' in str(event))
         self.assertTrue(verdict_result['message']['content'][0]['is_error'])
 
-    def test_recorded_placeholder_with_explicit_prose_owner_scores_from_events(self):
+    def test_recorded_placeholder_with_prose_owner_requires_a_grammar_report(self):
         case = next(case for case in CASES if case['id'] == PLACEHOLDER['id'])
         result = self.grade(self.placeholder_events(), case)
-        self.assertTrue(result['pass'], result['failures'])
+        self.assertFalse(result['pass'])
         self.assertEqual(result['actual_picks'], PLACEHOLDER['actual_picks'])
         self.assertEqual(result['read_paths'], PLACEHOLDER['read_paths'])
-        self.assertEqual(result['evidence']['selection_source'], 'final-text')
-        self.assertIn('EVALATION_PLACEHOLDER', result['evidence']['selection_text'])
-        self.assertEqual(result['evidence']['selection'],
-                         dict(delivery_owner='retrospective', history_to_recheck=[]))
+        self.assertIn('incomplete selection boundary', result['failures'])
+        self.assertIsNone(result['evidence']['selection'])
 
-    def test_prose_owner_report_still_requires_observed_skill_and_ordered_reads(self):
+    def test_labeled_report_still_requires_observed_skill_and_ordered_reads(self):
         case = next(case for case in CASES if case['id'] == PLACEHOLDER['id'])
-        # Use the recorded final report on the existing evidence-negative shapes.
         events = transcript(case, self.root)
-        events[-2] = self.placeholder_events()[-2]
+        events[-2]['message']['content'][0]['text'] = (
+            'Delivery owner: retrospective\nHistory to recheck: []')
+        self.assertTrue(self.grade(events, case)['pass'])
         extra = read(str(self.root / '.claude/skills/planning/references/playbooks/prototype.md'), 'extra')
         variants = [events[:1] + events[2:],                    # no Skill event
                     events[:2] + events[4:],                    # missing index
@@ -201,16 +202,16 @@ class HarnessTests(unittest.TestCase):
         events[-2]['type'] = 'user'
         self.assertFalse(self.grade(events, case)['pass'])
 
-    def test_prose_report_does_not_default_missing_or_wrong_history_to_empty(self):
+    def test_labeled_report_does_not_default_missing_or_wrong_history_to_empty(self):
         case = next(case for case in CASES if case['id'] == 96)
-        for history, accepted in [('', False), ('none.', True), ('[]', True),
+        for history, accepted in [('', False), ('none.', False), ('[]', True),
                                    ('[1, 2]', False), ('"[]"', False), ('unknown', False),
-                                   ('[]. History to re-check: [1]', False),
-                                   ('[]\nHistory to re-check: [1]', False)]:
+                                   ('[]. History to recheck: [1]', False),
+                                   ('[]\nHistory to recheck: [1]', False)]:
             events = transcript(case, self.root)
             report = 'Delivery owner: software-change'
             if history:
-                report += '\nHistory to re-check: ' + history
+                report += '\nHistory to recheck: ' + history
             events[-2]['message']['content'][0]['text'] = report
             result = self.grade(events, case)
             with self.subTest(history=history):
@@ -220,8 +221,12 @@ class HarnessTests(unittest.TestCase):
 
     def test_marker_can_be_inline_fenced_or_multiline_but_must_remain_unambiguous(self):
         marker = 'EVAL_SELECTION {"delivery_owner":"software-change","history_to_recheck":[]}'
+        labels = 'Delivery owner: software-change\nHistory to recheck: []'
         for report in (marker, 'Selection: `' + marker + '`.',
-                       '```json\n' + marker + '\n```', marker.replace(',', ',\n')):
+                       '```json\n' + marker + '\n```', marker.replace(',', ',\n'),
+                       marker + '\n' + labels, labels + '\n' + marker,
+                       labels + '\n```json\n' + marker + '\n```',
+                       labels + '\n~~~text\n' + marker + '\n~~~'):
             events = transcript(self.case, self.root)
             events[-2]['message']['content'][0]['text'] = report
             result = self.grade(events)
@@ -229,12 +234,74 @@ class HarnessTests(unittest.TestCase):
                 self.assertTrue(result['pass'], result['failures'])
                 self.assertEqual(result['evidence']['selection_source'], 'marker')
         for report in (marker + '\n' + marker,
+                       labels + '\n```json\n' + marker + '\nStep 2 needs re-checking.\n```',
                        'EVAL_SELECTION {bad json}\nDelivery owner: software-change',
-                       'EVAL_SELECTION {"delivery_owner":null}\nDelivery owner: software-change'):
+                       'EVAL_SELECTION {"delivery_owner":null}\nDelivery owner: software-change',
+                       'EVAL_SELECTION {"delivery_owner":"software-change"}',
+                       'EVAL_SELECTION {"delivery_owner":"software-change","history_to_recheck":[],"extra":0}',
+                       'EVAL_SELECTION {"delivery_owner":"retrospective","delivery_owner":"software-change","history_to_recheck":[]}',
+                       'EVAL_SELECTION {"delivery_owner":"software-change","history_to_recheck":[true]}',
+                       'EVAL_SELECTION {"delivery_owner":"software-change","history_to_recheck":[2,2]}'):
             events = transcript(self.case, self.root)
             events[-2]['message']['content'][0]['text'] = report
             with self.subTest(report=report):
                 self.assertFalse(self.grade(events)['pass'])
+
+    def test_owner_field_rejects_negation_and_unknown_compound(self):
+        for owner in ('not software-change', 'software-change and custom-release'):
+            report = 'Delivery owner: ' + owner + '\nHistory to recheck: []'
+            for marked in (False, True):
+                events = transcript(self.case, self.root)
+                prefix = events[-2]['message']['content'][0]['text'] + '\n' if marked else ''
+                events[-2]['message']['content'][0]['text'] = prefix + report
+                with self.subTest(owner=owner, marker=marked):
+                    result = self.grade(events)
+                    self.assertFalse(result['pass'])
+                    self.assertIn('wrong or multiple delivery owners: ' + owner, result['failures'])
+
+    def test_owner_field_rejects_unlabeled_continuations(self):
+        case = next(case for case in CASES if case['id'] == 93)
+        for owner in ('software-change and\nhillclimb', 'software-change\nhillclimb',
+                      'software-change\n\nhillclimb'):
+            report = 'Delivery owner: ' + owner + '\nHistory to recheck: []'
+            for marked in (False, True):
+                events = transcript(case, self.root)
+                prefix = events[-2]['message']['content'][0]['text'] + '\n' if marked else ''
+                events[-2]['message']['content'][0]['text'] = prefix + report
+                with self.subTest(owner=owner, marker=marked):
+                    result = self.grade(events, case)
+                    self.assertFalse(result['pass'])
+                    self.assertIn('unlabeled continuation after selection field', result['failures'])
+
+    def test_history_field_rejects_contradictory_residue(self):
+        case = next(case for case in CASES if case['id'] == 96)
+        for history in ('none\n- Step 2 needs re-checking.', '[]. Step 2 needs re-checking.',
+                        'nothing\n\nStep 2 needs re-checking.', 'no steps', 'None', '[] trailing'):
+            report = 'Delivery owner: software-change\nHistory to recheck: ' + history
+            for marked in (False, True):
+                events = transcript(case, self.root)
+                prefix = events[-2]['message']['content'][0]['text'] + '\n' if marked else ''
+                events[-2]['message']['content'][0]['text'] = prefix + report
+                with self.subTest(history=history, marker=marked):
+                    result = self.grade(events, case)
+                    self.assertFalse(result['pass'])
+                    self.assertTrue(any('history re-check' in reason or 'unlabeled continuation' in reason
+                                        for reason in result['failures']), result['failures'])
+
+    def test_native_read_requires_nonempty_returned_content(self):
+        for content, nonempty in (('', False), (' \n\t', False), (None, False), ([], False),
+                                  ([{'type': 'text', 'text': ''}], False),
+                                  ([{'type': 'text', 'text': '  \n'}], False), ([{}], False),
+                                  ('reference content', True),
+                                  ([{'type': 'text', 'text': 'reference content'}], True)):
+            events = transcript(self.case, self.root)
+            events[4]['message']['content'][0]['input']['offset'] = 0 if nonempty else 999999
+            events[5]['message']['content'][0]['content'] = content
+            with self.subTest(content=content):
+                result = self.grade(events)
+                self.assertEqual(result['pass'], nonempty, result['failures'])
+                if not nonempty:
+                    self.assertIn('missing reads: ' + self.case['expected_reads'][1], result['failures'])
 
     def test_compound_shell_reads_require_literal_commands_and_returned_file_content(self):
         folder = self.root.resolve() / 'a folder'
@@ -310,14 +377,12 @@ class HarnessTests(unittest.TestCase):
                     del events[-2]
                     self.assertFalse(self.grade(events, case)['pass'])
 
-    def test_multiline_history_normalizes_and_must_agree_with_marker(self):
+    def test_labeled_history_is_single_line_and_must_agree_with_marker(self):
         case = next(case for case in CASES if case['id'] == 95)
-        histories = ['[\n  2\n]', '\n  - 2',
-                     '\n  - Step 1 does not need re-checking.\n  - Step 2 needs re-checking.',
-                     '\n  - Step 1 is marked done, so its history is backed and does not need re-grading.\n'
-                     '  - Step 2 has no mark. Its PASS claim needs re-checking.']
+        histories = ['[2]', '[\n  2\n]', '\n  - 2',
+                     '\n  - Step 1 does not need re-checking.\n  - Step 2 needs re-checking.']
         for history in histories:
-            report = 'Delivery owner: retrospective\nHistory to re-check: ' + history
+            report = 'Delivery owner: retrospective\nHistory to recheck: ' + history
             for marked_history in (None, [2], []):
                 events = transcript(case, self.root)
                 if marked_history is None:
@@ -328,16 +393,16 @@ class HarnessTests(unittest.TestCase):
                     events.insert(-1, dict(type='assistant', message={'content': [dict(type='text', text=report)]}))
                 with self.subTest(history=history, marker=marked_history):
                     result = self.grade(events, case)
-                    self.assertEqual(result['pass'], marked_history != [], result['failures'])
-                    self.assertEqual(result['evidence']['selection']['history_to_recheck'], [2])
-                    if marked_history == []:
+                    self.assertEqual(result['pass'], history == '[2]' and marked_history != [], result['failures'])
+                    if history == '[2]':
+                        self.assertEqual(result['evidence']['selection']['history_to_recheck'], [2])
+                    if history == '[2]' and marked_history == []:
                         self.assertIn('contradictory selection reports: history_to_recheck', result['failures'])
 
     def test_empty_history_words_normalize_and_must_agree_with_marker(self):
         case = next(case for case in CASES if case['id'] == 96)
-        for history in ('nothing', 'none', 'no steps', 'No steps.',
-                        "nothing. This isn't a resumed plan, so there are no earlier claims to verify."):
-            report = 'Delivery owner: software-change\nHistory to re-check: ' + history
+        for history in ('nothing', 'none', '[]'):
+            report = 'Delivery owner: software-change\nHistory to recheck: ' + history
             for marked_history in (None, [], [2]):
                 events = transcript(case, self.root)
                 if marked_history is None:
@@ -353,18 +418,19 @@ class HarnessTests(unittest.TestCase):
                     if marked_history == [2]:
                         self.assertIn('contradictory selection reports: history_to_recheck', result['failures'])
 
-    def test_owner_prose_normalizes_support_but_rejects_competing_owners(self):
+    def test_owner_field_accepts_only_exact_allowed_tokens(self):
         case = next(case for case in CASES if case['id'] == 93)
-        owners = [('software-change (hillclimb supplies attempts)', True),
+        owners = [('software-change', True),
+                  ('software-change (hillclimb supplies attempts)', False),
                   ('the hillclimb playbook says that when it is combined with software-change, '
-                   'software-change is the only delivery owner', True),
-                  ('the software-change playbook alone', True),
+                   'software-change is the only delivery owner', False),
+                  ('the software-change playbook alone', False),
                   ('software-change and hillclimb', False),
                   ('software-change (or hillclimb)', False),
                   ('software-change is the only delivery owner and hillclimb is the only delivery owner', False),
                   ('hillclimb (software-change supplies attempts)', False)]
         for owner, accepted in owners:
-            report = 'Delivery owner: ' + owner + '\nHistory to re-check: []'
+            report = 'Delivery owner: ' + owner + '\nHistory to recheck: []'
             for mode in ('prose', 'earlier-marker', 'same-message-marker'):
                 events = transcript(case, self.root)
                 if mode == 'prose':
@@ -491,7 +557,7 @@ class HarnessTests(unittest.TestCase):
         case = next(case for case in CASES if case['id'] == 84)
         original = [entry['event'] for entry in fixture['events']]
         for owner, accepted in [('general', True), ('general flow', True),
-                                 (' General  Flow ', True), ('none', False), ('software-change', False),
+                                 (' General  Flow ', False), ('none', False), ('software-change', False),
                                  ('general flow plus software-change', False),
                                  ('the general flow', False), ('general, retrospective', False),
                                  (['general'], False), (None, False)]:

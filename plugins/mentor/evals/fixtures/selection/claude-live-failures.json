@@ -1,6 +1,6 @@
 {
   "source": ".mentor/plans/adopt-pstack-autonomy/evidence/eval-step11",
-  "projection": "Recorded stream events with original line numbers. Telemetry, partial-stream events, injected skill text and tool-result bodies omitted; inventories, tool calls, denial notices, assistant text and completion retained.",
+  "projection": "Recorded stream events with original line numbers. Inventories, tool calls, denial notices, assistant text and completion retained. Native Read results retain their first non-empty returned line from the original transcript; telemetry, partial-stream events, injected skill text and remaining result bodies omitted.",
   "cases": [
     {
       "id": 11,
@@ -1014,7 +1014,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_017SYqesLWwPgzey2q4ciSiB"
+                  "tool_use_id": "toolu_017SYqesLWwPgzey2q4ciSiB",
+                  "content": "1\t# Playbook index"
                 }
               ]
             }
@@ -1226,7 +1227,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_01QoVpNiJ6YT7vC6hD488Ego"
+                  "tool_use_id": "toolu_01QoVpNiJ6YT7vC6hD488Ego",
+                  "content": "1\t# Playbook index"
                 }
               ]
             }
@@ -1258,7 +1260,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_01THfeTLSR8NzXLKtphpvAL8"
+                  "tool_use_id": "toolu_01THfeTLSR8NzXLKtphpvAL8",
+                  "content": "1\tOverlay a mentor plan run loads when the requested goal is a retrospective of one"
                 }
               ]
             }
@@ -1691,7 +1694,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_016eRjvMJ2EfjVmUN7dguecU"
+                  "tool_use_id": "toolu_016eRjvMJ2EfjVmUN7dguecU",
+                  "content": "1\t# Playbook index"
                 }
               ]
             }
@@ -1723,7 +1727,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_014aF9uye7BySK2G8o89LNBK"
+                  "tool_use_id": "toolu_014aF9uye7BySK2G8o89LNBK",
+                  "content": "1\t# Metering pipeline"
                 }
               ]
             }
@@ -1778,7 +1783,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_01UQjiaXUWmaesW3v3DmS4pX"
+                  "tool_use_id": "toolu_01UQjiaXUWmaesW3v3DmS4pX",
+                  "content": "1\tOverlay a mentor plan run loads when the requested goal is a change to a repository's"
                 }
               ]
             }
@@ -2052,7 +2058,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_01Gvv3YCiGk72gNVV1LKxRup"
+                  "tool_use_id": "toolu_01Gvv3YCiGk72gNVV1LKxRup",
+                  "content": "1\t# Saved selection fixture"
                 }
               ]
             }
@@ -2084,7 +2091,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_01BZik8kBboR4sqCMipUzxra"
+                  "tool_use_id": "toolu_01BZik8kBboR4sqCMipUzxra",
+                  "content": "1\t{\"state\": \"in_progress\", \"note\": \"\"}"
                 }
               ]
             }
@@ -2116,7 +2124,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_01RjZBrNZNE6dkyVBp5oyNTT"
+                  "tool_use_id": "toolu_01RjZBrNZNE6dkyVBp5oyNTT",
+                  "content": "1\tVerdict: PASS"
                 }
               ]
             }
@@ -2148,7 +2157,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_01UXobY1aKtaT3iWFBCPhCJE"
+                  "tool_use_id": "toolu_01UXobY1aKtaT3iWFBCPhCJE",
+                  "content": "1\t# Playbook index"
                 }
               ]
             }
@@ -2180,7 +2190,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_014rHFgrWWWBarUVJ8gimVc9"
+                  "tool_use_id": "toolu_014rHFgrWWWBarUVJ8gimVc9",
+                  "content": "1\t# Principles catalog"
                 }
               ]
             }
@@ -2221,7 +2232,8 @@
               "content": [
                 {
                   "type": "tool_result",
-                  "tool_use_id": "toolu_01C1Yn43kjQKqfwVzFErD1Ce"
+                  "tool_use_id": "toolu_01C1Yn43kjQKqfwVzFErD1Ce",
+                  "content": "1\tOverlay a mentor plan run loads when the requested goal is a change to a repository's"
                 }
               ]
             }

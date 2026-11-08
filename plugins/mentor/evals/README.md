@@ -117,13 +117,35 @@ The original 48 routing cases retain their descriptions and STOP-only bodies. Ca
 83–96 instead copy each real skill folder, including its bundled references, byte for
 byte into the fresh project. Their common scratch instruction stops at workflow selection
 before approval, draft scaffolding, implementation, delegation, grading or delivery.
-It never gives the expected selection. The final `EVAL_SELECTION` JSON reports a single
-`delivery_owner` and any `history_to_recheck`; actual reads are independently scored from
-completed tool events, never from that self-report or a mention in prose.
+It never gives the expected selection. The final message reports one owner and the
+inherited steps needing re-check using either this JSON marker (anywhere, fenced or not):
 
-The parser credits successful `Read` calls and standalone literal `cat`/`sed`/`head`/`tail`
-commands with successful results. For literal shell sequences with `cd`, `;` or `&&`,
-it requires the staged file's full contents in the returned output and tracks Claude's
+```text
+EVAL_SELECTION {"delivery_owner":"software-change","history_to_recheck":[2]}
+```
+
+or these exact whole labeled lines:
+
+```text
+Delivery owner: software-change
+History to recheck: [2]
+```
+
+Allowed owners are exactly `none`, `general`, `general flow` (an explicit alias for
+`general`), `software-change`, `retrospective`, `investigation`, `hillclimb`, or
+`prototype`. JSON has exactly the two shown keys; history is an array of distinct positive
+integer step numbers. The labeled history also accepts exactly `none` or `nothing` for
+`[]`, and its array must fit on one line. Each field occupies its whole line with no
+explanation or punctuation after the value. No unlabeled continuation may follow a field;
+only the other field or a standalone marker may follow. Marker and labeled values must
+agree when both occur, including an earlier marker followed by a final labeled report.
+An earlier marker alone cannot replace a final report. Prose and decorated labels do not
+supply missing fields. Actual reads are independently scored from completed tool events,
+never from that self-report or a mention in prose.
+
+The parser credits successful `Read` calls only with non-empty returned text. Literal
+`cat`/`sed`/`head`/`tail` commands also require non-empty returned text containing the staged
+file's full contents, including for shell sequences with `cd`, `;` or `&&`. It tracks Claude's
 working directory across completed calls. An earlier proven read still counts when a
 later command fails; a failed read, path mention or unsupported shell expression does not.
 Index completion must precede each playbook read request;

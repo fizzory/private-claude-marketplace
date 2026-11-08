@@ -48,10 +48,18 @@ Finish with exactly one delivery owner: if planning is selected and no playbook 
 chosen, use \"general\"; use \"none\" only when planning was not selected.
 Also report the step numbers needing re-check. Prefer this template; replace <owner>:
 EVAL_SELECTION {"delivery_owner":"<owner>","history_to_recheck":[]}
-Replace [] with the inherited step numbers only when they need re-checking.
-Alternatively use these two labeled lines:
+The marker may appear anywhere in your final message, fenced or not. Use exactly
+these two JSON keys. Replace [] with a JSON array of positive, distinct step numbers
+only when inherited steps need re-checking. The allowed owner values are exactly:
+none, general, general flow (an alias for general), software-change, retrospective,
+investigation, hillclimb, prototype. Use one exact value, without explanation.
+Alternatively finish with these two whole labeled lines:
 Delivery owner: <owner>
-History to re-check: []
+History to recheck: []
+The history value must be a single-line JSON array (for example [2]), or exactly
+none, nothing, or []. No punctuation, explanation, or unlabeled continuation lines
+may follow either labeled field; only the other field or a standalone marker may
+follow. If both formats are present, their owner and history must agree.
 Skill selection and completed reference reads are checked from tool events.
 Do not ask for approval or perform the user's task in this evaluation.
 Skip plan scaffolding: do not create or edit any files at this selection boundary.
@@ -247,121 +255,116 @@ def completed_word_reads(words, cwd, root, output, success):
             content = path.read_text().rstrip("\n")
         except (OSError, UnicodeError):
             continue
-        if content and content in output:
+        if content.strip() and isinstance(output, str) and output.strip() and content in output:
             paths.append(str(path))
     # A later failing command need not erase an earlier, visibly completed read.
     return paths, cwd if success or paths else None
 
 
-def prose_delivery_owner(value):
-    """Normalize an owner assertion without counting its supporting playbook."""
-    names = "(?:" + "|".join(re.escape(name) for name in
-                              sorted(DELIVERY_OWNERS, key=len, reverse=True)) + ")"
-    value = " ".join(value.casefold().split())
-    # These clauses describe support, rather than assigning a second owner.
-    value = re.sub(rf"\s*\({names} supplies attempts\)", "", value)
-    value = re.sub(rf"^the {names} playbook says that when it is combined with {names},\s*",
-                   "", value)
-    value = re.sub(r"\s+is the (?:only|single) delivery owner$", "", value)
-    value = re.sub(r"^the\s+|\s+playbook(?:\s+alone)?$|\s+alone$", "", value)
-    named = {DELIVERY_OWNERS[name] for name in
-             re.findall(rf"(?<![\w-]){names}(?![\w-])", value)}
-    return named.pop() if len(named) == 1 else None
+def selection_history(value):
+    """A history is an array of distinct positive integer step numbers."""
+    return (isinstance(value, list) and all(type(step) is int and step > 0 for step in value)
+            and len(value) == len(set(value)))
 
 
-def prose_history(value):
-    """Read JSON or explicit step bullets; unknown history remains an error."""
-    first = value.split("\n", 1)[0].split(". ", 1)[0].rstrip(".").strip()
-    if first.casefold() in ("none", "nothing", "no steps"):
-        return []
-    if value.startswith("["):
-        return json.loads(value.split(". ", 1)[0].rstrip("."))
-    bullets = re.split(r"(?m)^\s*[-+]\s+", value)
-    if bullets[0].strip() or len(bullets) == 1:
-        raise ValueError("unrecognized history")
-    history, seen = [], set()
-    for bullet in bullets[1:]:
-        match = re.fullmatch(r"(?:step\s+)?(\d+)\b(.*)", bullet.strip(), re.I | re.S)
-        if not match or int(match[1]) in seen:
-            raise ValueError("ambiguous history bullet")
-        step, detail = int(match[1]), match[2].strip()
-        seen.add(step)
-        backed_pattern = r"\bdoes not need re-(?:checking|grading)\b"
-        backed = re.search(backed_pattern, detail, re.I)
-        recheck = re.search(r"\bneeds? re-check(?:ing)?\b",
-                            re.sub(backed_pattern, "", detail, flags=re.I), re.I)
-        if not detail or (recheck and not backed):
-            history.append(step)
-        elif not backed or recheck:
-            raise ValueError("ambiguous history bullet")
-    return history
+def selection_object(pairs):
+    """Duplicate JSON keys cannot silently overwrite an earlier assertion."""
+    report = {}
+    for key, value in pairs:
+        if key in report:
+            raise ValueError("duplicate selection key")
+        report[key] = value
+    return report
 
 
 def selection_report(text_blocks, final_text, errors):
-    """Parse reports, never infer the owner or history from selected skills/reads."""
+    """Accept exact JSON or whole labeled lines, never normalize report prose."""
     markers = []
-    marker_seen = False
+    decoder = json.JSONDecoder(object_pairs_hook=selection_object)
     for block in text_blocks:
         for match in re.finditer(r"\bEVAL_SELECTION\b", block):
-            marker_seen = True
             try:
-                report, _ = json.JSONDecoder().raw_decode(block[match.end():].lstrip())
+                report, _ = decoder.raw_decode(block[match.end():].lstrip())
                 markers.append(report)
-            except json.JSONDecodeError:
+                if not isinstance(report, dict) or set(report) != {"delivery_owner", "history_to_recheck"}:
+                    errors.append("malformed selection boundary fields")
+                    continue
+                owner = report["delivery_owner"]
+                if not isinstance(owner, str) or owner not in DELIVERY_OWNERS:
+                    errors.append("wrong or multiple delivery owners: " + json.dumps(owner))
+                if not selection_history(report["history_to_recheck"]):
+                    errors.append("malformed history re-check statement")
+            except ValueError:
                 errors.append("malformed selection boundary JSON")
     if len(markers) > 1:
         errors.append("multiple selection boundaries")
 
-    # A format slip must not erase an explicit report like the recorded #85.
-    # Only labeled assertions in the final assistant message qualify; mentions,
-    # earlier commentary, user text and tool output cannot supply an owner.
-    plain = re.sub(r"[*`]", "", final_text)
-
-    def statements(labels, multiline=False):
-        # Match labels separately so a second assertion on the same line cannot
-        # hide behind the first assertion's explanatory prose.
-        matches = re.finditer(rf"(?im)(?:^|\.\s+)\s*(?:-\s*)?(?:{labels})\s*:[ \t]*", plain)
-        values = []
-        for match in matches:
-            value = plain[match.end():]
-            if multiline:
-                value = re.split(r"\n\s*\n|\bEVAL_SELECTION\b", value, maxsplit=1)[0]
-            else:
-                value = value.split("\n", 1)[0].split(". ", 1)[0].rstrip(".")
-            values.append(value.strip())
-        return values
-
-    owners = statements(r"delivery[ _]owner|who delivers(?: it)?")
-    report = {}
-    if len(owners) > 1:
-        errors.append("multiple delivery owner statements")
-    elif owners:
-        report["delivery_owner"] = prose_delivery_owner(owners[0])
-        if report["delivery_owner"] is None:
-            errors.append("wrong or multiple delivery owners: " + owners[0])
-    histories = statements(r"history_to_recheck|history to re-check", multiline=True)
-    if len(histories) > 1:
-        errors.append("multiple history re-check statements")
-    elif histories:
+    # Blank final marker spans only to distinguish a standalone marker from an
+    # unlabeled continuation. Field values are always parsed from the original.
+    remainder = list(final_text)
+    final_marker = False
+    for match in re.finditer(r"\bEVAL_SELECTION\b", final_text):
+        final_marker = True
+        value = final_text[match.end():]
         try:
-            report["history_to_recheck"] = prose_history(histories[0])
+            _, end = decoder.raw_decode(value.lstrip())
         except ValueError:
-            errors.append("malformed history re-check statement")
-    if marker_seen:
-        marker = markers[0] if len(markers) == 1 else None
-        if isinstance(marker, dict):
-            for key, value in report.items():
-                marked = marker.get(key)
-                if key == "delivery_owner":
-                    marked = (DELIVERY_OWNERS.get(" ".join(marked.casefold().split()))
-                              if isinstance(marked, str) else None)
-                if value != marked:
-                    errors.append("contradictory selection reports: " + key)
-        # An earlier marker cannot replace a missing or different final report.
-        if re.search(r"\bEVAL_SELECTION\b", final_text):
-            return marker, "marker"
+            continue
+        end += match.end() + len(value) - len(value.lstrip())
+        start = match.start()
+        # A fence enclosing only the marker belongs to the marker grammar, even
+        # when that marker follows the labeled fields.
+        opening = re.search(r"(?m)^[ \t]*(`{3,}|~{3,})[^\n]*\n[ \t]*\Z", final_text[:start])
+        if opening:
+            closing = re.match(r"[ \t]*\n[ \t]*" + re.escape(opening[1]) + r"[ \t]*(?=\n|\Z)",
+                               final_text[end:])
+            if closing:
+                start, end = opening.start(), end + closing.end()
+        for index in range(start, end):
+            if remainder[index] != "\n":
+                remainder[index] = " "
+    residue_lines = "".join(remainder).splitlines()
+    labels = {"Delivery owner": "delivery_owner", "History to recheck": "history_to_recheck"}
+    report = {}
+    seen = set()
+    for line, residue in zip(final_text.splitlines(), residue_lines):
+        match = re.fullmatch(r"(Delivery owner|History to recheck):[ \t]*(.*)", line.strip())
+        if not match:
+            if seen and residue.strip():
+                errors.append("unlabeled continuation after selection field")
+            continue
+        key, value = labels[match[1]], match[2].strip()
+        if key in seen:
+            errors.append("multiple selection field statements: " + key)
+        seen.add(key)
+        if key == "delivery_owner":
+            report[key] = value
+            if value not in DELIVERY_OWNERS:
+                errors.append("wrong or multiple delivery owners: " + value)
+        else:
+            try:
+                history = [] if value in ("none", "nothing") else json.loads(value)
+                if not selection_history(history):
+                    raise ValueError("invalid history steps")
+                report[key] = history
+            except ValueError:
+                errors.append("malformed history re-check statement")
+    if seen and set(report) != set(labels.values()):
+        errors.append("incomplete labeled selection report")
+    marker = markers[0] if len(markers) == 1 else None
+    if isinstance(marker, dict):
+        for key, value in report.items():
+            marked = marker.get(key)
+            if key == "delivery_owner":
+                value = DELIVERY_OWNERS.get(value)
+                marked = DELIVERY_OWNERS.get(marked) if isinstance(marked, str) else None
+            if value != marked:
+                errors.append("contradictory selection reports: " + key)
+    # An earlier marker still cannot replace a missing or different final report.
+    if final_marker:
+        return marker, "marker"
     # An absent history field stays absent: cases that check it must still fail.
-    return (report, "final-text") if owners else (None, None)
+    return (report, "final-text") if seen else (None, None)
 
 
 def selection_read_command(command):
@@ -442,6 +445,16 @@ def project_snapshot(root):
     return snapshot
 
 
+def returned_text(content):
+    """Read tools return either a string or a list of text content blocks."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "\n".join(block["text"] for block in content if isinstance(block, dict)
+                         and block.get("type") == "text" and isinstance(block.get("text"), str))
+    return ""
+
+
 def observe_transcript(transcript, root, host):
     """Observe completed tool calls; prose and partial-stream argument guesses don't count."""
     evidence = {"skill_events": [], "reads": [], "init": None, "contamination": {},
@@ -513,14 +526,13 @@ def observe_transcript(transcript, root, host):
                 call_id = block["tool_use_id"]
                 requested, name, inputs = pending.pop(call_id)
                 success = not block.get("is_error", False)
+                output = returned_text(block.get("content"))
                 if name == "Bash":
-                    output = block.get("content", "")
-                    if not isinstance(output, str):
-                        output = ""
                     paths, shell_cwd = completed_command_reads(
                         inputs.get("command", ""), shell_cwd, root, output, success)
                 else:
-                    paths = [inputs["file_path"]] if success and inputs.get("file_path") else []
+                    paths = ([inputs["file_path"]] if success and output.strip()
+                             and inputs.get("file_path") else [])
                 for path in paths:
                     evidence["reads"].append({"path": read_path(path, root, host),
                                               "requested_at": requested, "completed_at": number,
@@ -607,7 +619,7 @@ def score_case(case, evidence, returncode=0, timed_out=False):
             reasons.append("incomplete selection boundary")
         else:
             owner = selection.get("delivery_owner")
-            normalized_owner = DELIVERY_OWNERS.get(" ".join(owner.casefold().split())) if isinstance(owner, str) else None
+            normalized_owner = DELIVERY_OWNERS.get(owner) if isinstance(owner, str) else None
             allowed = case["expected_delivery_owner"]
             allowed = allowed if isinstance(allowed, list) else [allowed]
             if normalized_owner is None or normalized_owner not in allowed:

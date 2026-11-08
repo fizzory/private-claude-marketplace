@@ -74,12 +74,13 @@ best result from an artifact that was later reverted.
 
 ## 6. Run rules (After Proceed)
 
-Read the attempt log before each attempt. Apply **one change → one measurement →
-keep or revert**, using the frozen harness and regression checks before the next
-change. Keep a change only when the metric improves beyond noise and the gates
-stay green; otherwise revert that attempt completely without undoing unrelated
-work. Log both kept and reverted attempts. Never stack unmeasured changes or
-claim an improvement from inspection alone.
+Keep a compact hypothesis summary, append each attempt's row to the log, and
+re-read the log on resume so earlier results guide the next attempt. Apply
+**one change → one measurement → keep or revert**, using the frozen harness and
+regression checks before the next change. Keep a change only when the metric
+improves beyond noise and the gates stay green; otherwise revert that attempt
+completely without undoing unrelated work. Log both kept and reverted attempts.
+Never stack unmeasured changes or claim an improvement from inspection alone.
 
 For a plateau, follow [planning's After Proceed run rules](../../SKILL.md#implement)
 → **a plateau is not a stop**, including its bounds and dead-end rule. The

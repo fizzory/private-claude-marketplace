@@ -27,10 +27,8 @@ The step order is save `verdicts/step-N.md` → PASS row → `record-write` → 
 A new tick makes a point-in-time read of the latest saved PASS. Released verdict
 paths and optional headers remain readable, and historical ticks remain idempotent;
 see the [verifier contract](../../skills/planning/references/verifier-contract.md).
-Its Evidence reuse section allows deterministic output reuse only for the same
-check and predicate, with identical command and cwd on a proven-identical clean tree
-and unchanged inputs; every stage still gets a fresh grade, and live CI, external
-state and timing-sensitive repeats run again.
+For output reuse, follow the verifier contract's
+[Evidence reuse](../../skills/planning/references/verifier-contract.md#evidence-reuse) section.
 
 Read [principles](../../skills/planning/references/principles.md) at planning's named
 decision points and selected playbooks' optional Run rules before starting or

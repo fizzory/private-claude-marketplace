@@ -28,10 +28,8 @@ A new tick makes a point-in-time read of the latest saved PASS. A saved
 retain the same evidence instead of claiming independence. Released verdict paths,
 optional headers and historical tick idempotency remain supported; see the
 [verifier contract](../../skills/planning/references/verifier-contract.md).
-Reuse deterministic output only for the same check and predicate, with identical
-command and cwd on a proven-identical clean tree and unchanged inputs with the
-contract's complete evidence; a fresh grade is still required at each stage.
-Live CI, external state and timing-sensitive repeats run again.
+For output reuse, follow the verifier contract's
+[Evidence reuse](../../skills/planning/references/verifier-contract.md#evidence-reuse) section.
 
 Read [principles](../../skills/planning/references/principles.md) at planning's named
 decision points and selected playbooks' optional Run rules before starting or

@@ -169,20 +169,27 @@ def read_path(path, root, host):
             return str(absolute)
 
 
-def command_reads(command):
-    """Recognize literal cat/sed/head/tail reads, not mentions in search/output text."""
-    if "$" in command or "`" in command:
-        return []
-    try:
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()\n")
-        lexer.whitespace = " \t\r"
-        lexer.whitespace_split = True
-        words = list(lexer)
-    except ValueError:
-        return []
-    # Codex may wrap the actual command in a login shell.
-    if len(words) == 3 and Path(words[0]).name in ("bash", "zsh", "sh") and words[1] in ("-c", "-lc"):
-        return command_reads(words[2])
+def command_words(command):
+    """Tokenize literal commands once, retaining child-shell cwd isolation."""
+    wrapped = False
+    while True:
+        if "$" in command or "`" in command:
+            return None, wrapped
+        try:
+            lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()\n")
+            lexer.whitespace = " \t\r"
+            lexer.whitespace_split = True
+            words = list(lexer)
+        except ValueError:
+            return None, wrapped
+        # Codex may wrap the actual command in a login shell.
+        if len(words) != 3 or Path(words[0]).name not in ("bash", "zsh", "sh") or words[1] not in ("-c", "-lc"):
+            return words, wrapped
+        command, wrapped = words[2], True
+
+
+def literal_command_reads(words):
+    """Recognize simple read tokens without claiming completion evidence."""
     if not words or words[0] not in ("cat", "sed", "head", "tail"):
         return []
     if any(word and all(char in ";&|<>()\n" for char in word) for word in words):
@@ -190,28 +197,31 @@ def command_reads(command):
     return [word for word in words[1:] if word.endswith(".md") and not word.startswith("-")]
 
 
+def command_reads(command):
+    """Recognize literal cat/sed/head/tail reads, not mentions in search/output text."""
+    words, _ = command_words(command)
+    return literal_command_reads(words)
+
+
 def completed_command_reads(command, cwd, root, output, success):
     """Credit compound shell reads only when the returned output contains the file."""
+    words, wrapped = command_words(command)
+    paths, final_cwd = completed_word_reads(words, cwd, root, output, success)
+    return paths, cwd if wrapped else final_cwd
+
+
+def completed_word_reads(words, cwd, root, output, success):
+    """Apply completion evidence policy to the shared command tokens."""
     def absolute(path):
         return Path(path).resolve() if Path(path).is_absolute() else (
             (cwd / path).resolve() if cwd is not None else None)
 
-    simple = command_reads(command)
+    simple = literal_command_reads(words)
     if simple and success:
         return [str(path) for name in simple if (path := absolute(name)) is not None], cwd
     # This is a conservative literal-command observer, not a shell evaluator.
-    if "$" in command or "`" in command:
+    if words is None:
         return [], None
-    try:
-        lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()\n")
-        lexer.whitespace = " \t\r"
-        lexer.whitespace_split = True
-        words = list(lexer)
-    except ValueError:
-        return [], None
-    if len(words) == 3 and Path(words[0]).name in ("bash", "zsh", "sh") and words[1] in ("-c", "-lc"):
-        paths, _ = completed_command_reads(words[2], cwd, root, output, success)
-        return paths, cwd  # A child shell's cd does not persist in its caller.
     if any(word in ("||", "|", "&", "(", ")", "<<") for word in words):
         return [], None
     segments = [[]]
@@ -227,7 +237,7 @@ def completed_command_reads(command, cwd, root, output, success):
             if cwd is None or not cwd.is_dir():
                 return [], None
         elif segment[0] in ("cat", "sed", "head", "tail", "ls", "echo", "pwd"):
-            for name in command_reads(shlex.join(segment)):
+            for name in literal_command_reads(segment):
                 path = absolute(name)
                 if path is not None and path.is_relative_to(root.resolve()):
                     candidates.append(path)
@@ -297,7 +307,7 @@ def selection_report(text_blocks, final_text, errors):
 
 def observe_transcript(transcript, root, host):
     """Observe completed tool calls; prose and partial-stream argument guesses don't count."""
-    evidence = {"skills": [], "skill_events": [], "reads": [], "init": None, "contamination": {},
+    evidence = {"skill_events": [], "reads": [], "init": None, "contamination": {},
                 "complete": False, "selection": None, "errors": [], "tool_calls": [],
                 "permission_denials": []}
     pending = {}
@@ -359,7 +369,6 @@ def observe_transcript(transcript, root, host):
                     # Keep the entire name, including namespaces and non-staged picks.
                     pick = inputs.get("skill", inputs.get("skill_name"))
                     if isinstance(pick, str):
-                        evidence["skills"].append(pick)
                         evidence["skill_events"].append({"name": pick, "at": number})
                 if name in ("Read", "Bash"):
                     pending[call_id] = (number, name, inputs)
@@ -406,12 +415,11 @@ def observe_transcript(transcript, root, host):
         for read in evidence["reads"]:
             parts = read["path"].split("/")
             if len(parts) == 2 and parts[1] == "SKILL.md":
-                evidence["skills"].append(parts[0])
                 evidence["skill_events"].append({"name": parts[0], "at": read["completed_at"]})
             elif read["path"].endswith("/SKILL.md"):
                 pick = "external:" + Path(read["path"]).parent.name
-                evidence["skills"].append(pick)
                 evidence["skill_events"].append({"name": pick, "at": read["completed_at"]})
+    evidence["skills"] = [event["name"] for event in evidence["skill_events"]]
     unexpected_picks = sorted(set(evidence["skills"]) - set(SKILLS) - BUILTIN_SKILLS)
     if unexpected_picks:
         evidence["contamination"]["skill_picks"] = unexpected_picks

@@ -121,7 +121,8 @@ session: keep working until a terminal state per **Hosts without a Stop hook or
 subagents**. To re-plan instead, run `plan-state.sh set <slug> draft`, then plan it
 again (`/mentor:plan <slug>` in Claude Code).
 
-On resume, read `references/principles.md` and re-check inherited claims backed by
+On resume, load `references/principles.md` once per context (re-read after compaction)
+and revisit only the relevant entry when re-checking inherited claims backed by
 neither a tick nor a verdict file: **a passing prior self-report is not the proof**.
 Use the existing readers for historical ticks and saved verdicts; do not blanket
 re-grade supported history. This checks unsupported claims without redoing proven work.
@@ -259,8 +260,9 @@ items with the constitution's or built-in list. Resolve incompatibilities before
 approval, never by load order; do not add a prototype overlay mid-plan. This keeps
 one coherent delivery contract without weakening any applicable check.
 
-Read `references/principles.md` before research and apply the entries whose triggers
-match, so research tests assumptions and covers causes before choosing a fix.
+Load `references/principles.md` once per context before research (re-read after
+compaction); at later decision points revisit only the relevant entry. Apply matching
+entries so research tests assumptions and covers causes before choosing a fix.
 Research what the plan needs: the files, config, docs and history the work touches,
 and the facts each decision will turn on. How you gather it is up to you and the host —
 read directly for a small task, or use whatever research tooling the host offers for a
@@ -349,8 +351,9 @@ fork you noticed yourself (approach A vs B, scope boundary, acceptance criteria,
 naming). The human is asked only what no one else can answer (AGENTS.md →
 Mentor core concept, rule 4).
 
-Read `references/principles.md` during triage; name a principle in the decision log
-only when it changes a choice, so the log records decisions rather than a checklist.
+Revisit only the relevant entry in `references/principles.md` during triage; name a
+principle in the decision log only when it changes a choice, so the log records
+decisions rather than a checklist.
 Triage each item into exactly one bucket, in this order:
 
 1. **Codebase-answerable** — the files, config, history, or docs settle it.
@@ -950,10 +953,11 @@ drafts, feedback, and tracked writes**).
    `self-graded` fallback. This preserves the grade for resumed runs and keeps the
    builder from presenting its own judgment as independent. Tick per step, never in a
    batch, after its PASS row; tick now refuses new ticks without a saved PASS verdict.
-3. **FAIL** → read `references/principles.md`, fix the `[GOAL]` gaps and re-grade once
-   with a fresh verifier. A second FAIL → write down and test any shared premise
-   before another fix, then **re-plan** that step: rewrite its approach (log a
-   `review?: needed` row), at most once per step and three times per run.
+3. **FAIL** → revisit only the relevant entry in `references/principles.md`, fix the
+   `[GOAL]` gaps and re-grade once with a fresh verifier. A second FAIL → write down
+   and test any shared premise before another fix, then **re-plan** that step:
+   rewrite its approach (log a `review?: needed` row), at most once per step and
+   three times per run.
    Testing the premise keeps the next fix tied to evidence. **A re-plan never weakens a
    `Done when:` or the Goal check** — the verifier reports a weakened check as a FAIL.
    Limit hit → `failed`.

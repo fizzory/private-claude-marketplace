@@ -5,6 +5,7 @@ import hashlib
 import os
 import re
 import shlex
+import string
 import shutil
 import subprocess
 import sys
@@ -178,32 +179,115 @@ def read_path(path, root, host):
             return str(absolute)
 
 
-def command_words(command, allow_variables=False):
+def without_shell_comments(command):
+    """Strip comments at unquoted word boundaries, preserving literal hashes."""
+    output = []
+    quote = None
+    word_start = True
+    i = 0
+    while i < len(command):
+        char = command[i]
+        if char == "\\" and quote != "'" and i + 1 < len(command):
+            output.extend(command[i:i + 2])
+            i += 2
+            word_start = False
+            continue
+        if quote:
+            if char == quote:
+                quote = None
+        elif char in ("'", '"'):
+            quote = char
+        elif char == "#" and word_start:
+            end = command.find("\n", i)
+            i = len(command) if end == -1 else end
+            continue
+        output.append(char)
+        word_start = quote is None and (char.isspace() or char in ";&|<>()")
+        i += 1
+    return "".join(output)
+
+
+def command_words(command, allow_variables=False, raw_words=False):
     """Tokenize literal commands once, retaining child-shell cwd isolation."""
     wrapped = False
     while True:
         if "`" in command or "$(" in command or ("$" in command and not allow_variables):
             return None, wrapped
+        command = without_shell_comments(command)
         try:
             lexer = shlex.shlex(command, posix=True, punctuation_chars=";&|<>()\n")
             lexer.whitespace = " \t\r"
             lexer.whitespace_split = True
-            words = list(lexer)
+            lexer.commenters = ""  # A # inside an unquoted word is literal shell data.
+            if raw_words:
+                tokens = []
+                while True:
+                    # shlex can look one punctuation character ahead. Keep the
+                    # original token spelling so quotes/escapes cannot hide a
+                    # long literal behind something resembling an expansion.
+                    start = lexer.instream.tell() - len(lexer._pushback_chars)
+                    word = lexer.get_token()
+                    if word is None:
+                        break
+                    end = lexer.instream.tell() - len(lexer._pushback_chars)
+                    tokens.append((word, command[start:end].strip()))
+                words = [word for word, _ in tokens]
+            else:
+                words = list(lexer)
         except ValueError:
             return None, wrapped
         # Codex may wrap the actual command in a login shell.
         if len(words) != 3 or Path(words[0]).name not in ("bash", "zsh", "sh") or words[1] not in ("-c", "-lc"):
-            return words, wrapped
+            return tokens if raw_words else words, wrapped
         command, wrapped = words[2], True
+
+
+def reader_operands(words):
+    """Recognize supported reader syntax without executing a shell or reader."""
+    if not words or words[0] not in ("cat", "sed", "head", "tail"):
+        return None
+    if any(word and all(char in ";&|<>()\n" for char in word) for word in words):
+        return None
+    reader, *args = words
+    if reader == "sed":
+        if args[:1] == ["-n"]:
+            args = args[1:]
+        if args[:1] == ["-e"]:
+            args = args[1:]
+        if not args or not re.fullmatch(r"(?:\d+|\$)(?:,(?:\d+|\$))?p", args[0]):
+            return None
+        args = args[1:]
+    files = []
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg == "--":
+            return files + args[i + 1:]
+        if not arg.startswith("-"):
+            files.append(arg)
+        elif reader == "cat":
+            if not (re.fullmatch(r"-[AbbenstuvET]+", arg) or arg in (
+                    "--show-all", "--number-nonblank", "--show-ends", "--number",
+                    "--squeeze-blank", "--show-tabs", "--show-nonprinting")):
+                return None
+        elif reader in ("head", "tail"):
+            if arg in ("-n", "-c", "--lines", "--bytes"):
+                i += 1
+                if i == len(args) or not re.fullmatch(r"[+-]?\d+", args[i]):
+                    return None
+            elif not (re.fullmatch(r"-(?:[qv]+|\d+|[nc][+-]?\d+)", arg)
+                      or re.fullmatch(r"--(?:lines|bytes)=[+-]?\d+", arg)
+                      or arg in ("--quiet", "--silent", "--verbose")):
+                return None
+        else:
+            return None
+        i += 1
+    return files
 
 
 def literal_command_reads(words):
     """Recognize simple read tokens without claiming completion evidence."""
-    if not words or words[0] not in ("cat", "sed", "head", "tail"):
-        return []
-    if any(word and all(char in ";&|<>()\n" for char in word) for word in words):
-        return []
-    return [word for word in words[1:] if word.endswith(".md") and not word.startswith("-")]
+    return [word for word in (reader_operands(words) or []) if word.endswith(".md")]
 
 
 def command_reads(command):
@@ -215,8 +299,116 @@ def command_reads(command):
 def completed_command_reads(command, cwd, root, output, success):
     """Credit shell reads only when the returned output contains the file."""
     words, wrapped = command_words(command)
+    if not command_printers_allowed(command, read_credit=True):
+        return [], cwd if wrapped else None
     paths, final_cwd = completed_word_reads(words, cwd, root, output, success)
     return paths, cwd if wrapped else final_cwd
+
+
+def literal_print_output(words, allow_expansions=False):
+    """Allow harmless echo diagnostics; never render their text as read evidence."""
+    if not words or words[0] != "echo":
+        return False
+    for arg in words[1:]:
+        literal = []
+        expanded = False
+        quote = None
+        i = 0
+        while i < len(arg):
+            char = arg[i]
+            if char in ("'", '"') and (quote is None or quote == char):
+                quote = char if quote is None else None
+            elif char == "$" and quote != "'":
+                variable = re.match(r"\$[A-Za-z_][A-Za-z0-9_]*", arg[i:])
+                if variable:
+                    expanded = True
+                    i += variable.end()
+                    continue
+                if re.match(r"\$\{[A-Za-z_][A-Za-z0-9_]*", arg[i:]):
+                    expanded = True
+                    depth, end = 1, i + 2
+                    while end < len(arg) and depth:
+                        depth += (arg[end] == "{") - (arg[end] == "}")
+                        end += 1
+                    if depth:
+                        return False
+                    i = end
+                    continue
+                literal.append(char)
+            else:
+                literal.append(char)
+            i += 1
+        literal = "".join(literal)
+        if allow_expansions and expanded:
+            continue
+        if re.fullmatch(r"-[nEe]+", literal) or "\\" in literal or "%" in literal or len(literal) >= 40:
+            return False
+        variable_diagnostic = expanded or bool(re.fullmatch(
+            r"\$(?:[A-Za-z_][A-Za-z0-9_]*|\{[A-Za-z_][A-Za-z0-9_]*[^{}]*\})", literal))
+        if expanded and not allow_expansions:
+            return False
+        if not (allow_expansions and variable_diagnostic) and any(char not in string.punctuation for char in literal):
+            return False
+    return True
+
+
+def without_echo_redirections(tokens):
+    """Remove harmless echo redirections before validating its printed arguments."""
+    output = []
+    name = None
+    i = 0
+    while i < len(tokens):
+        word, raw = tokens[i]
+        if word in (";", "&&", "|", "\n"):
+            name = None
+        elif name is None:
+            name = word
+        if name == "echo" and word in (">", ">&"):
+            if output and output[-1][0] in ("1", "2"):
+                output.pop()
+            if i + 1 == len(tokens) or tokens[i + 1][0] not in (
+                    ("/dev/null",) if word == ">" else ("1", "2")):
+                return None
+            i += 2
+            continue
+        output.append((word, raw))
+        i += 1
+    return output
+
+
+def command_printers_allowed(command, read_credit=False):
+    """Apply the printer allowlist to original spellings, including shell wrappers."""
+    tokens, _ = command_words(command, allow_variables=True, raw_words=True)
+    tokens = without_echo_redirections(tokens) if tokens is not None else None
+    if tokens is None:
+        return False
+    segments = [[]]
+    for word, raw in tokens:
+        if word and all(char in ";&|<>()\n" for char in word):
+            if "<<" in word:
+                return False
+            segments.append([])
+        else:
+            segments[-1].append((word, raw))
+    for segment in filter(None, segments):
+        name = segment[0][0]
+        if name in ("echo", "printf") and not literal_print_output(
+                [name] + [raw for _, raw in segment[1:]], allow_expansions=not read_credit):
+            return False
+        if name == "sed":
+            args = [word for word, _ in segment[1:]]
+            if args[:1] == ["-n"]:
+                args = args[1:]
+            scripts = []
+            if args[:1] != ["-e"]:
+                scripts = args[:1]
+            for index, arg in enumerate(args[:-1]):
+                if arg == "-e":
+                    scripts.append(args[index + 1])
+            if any(re.search(r"(?:^|[;\n])\s*(?:\d+|\$)?(?:,(?:\d+|\$))?[iac]",
+                             script) for script in scripts):
+                return False
+    return True
 
 
 def completed_word_reads(words, cwd, root, output, success):
@@ -226,8 +418,12 @@ def completed_word_reads(words, cwd, root, output, success):
             (cwd / path).resolve() if cwd is not None else None)
 
     # This is a conservative literal-command observer, not a shell evaluator.
-    if words is None:
+    if words is None or any("$" in word for word in words) or not isinstance(output, str):
         return [], None
+    tokens = without_echo_redirections([(word, word) for word in words])
+    if tokens is None:
+        return [], None
+    words = [word for word, _ in tokens]
     if any(word in ("||", "|", "&", "(", ")", "<<") for word in words):
         return [], None
     segments = [[]]
@@ -237,20 +433,42 @@ def completed_word_reads(words, cwd, root, output, success):
         else:
             segments[-1].append(word)
     candidates = []
-    for segment in filter(None, segments):
+    diagnostics = output.splitlines()
+    operands = {}
+    segments = [segment for segment in segments if segment]
+    for index, segment in enumerate(segments):
         if segment[0] == "cd" and len(segment) == 2:
             cwd = absolute(segment[1])
             if cwd is None or not cwd.is_dir():
                 return [], None
-        elif segment[0] in ("cat", "sed", "head", "tail", "ls", "echo", "pwd"):
+        elif segment[0] in ("echo", "printf"):
+            if not literal_print_output(segment):
+                return [], None
+        elif segment[0] in ("cat", "sed", "head", "tail", "ls", "pwd"):
+            if any("$" in word for word in segment):
+                return [], None
+            operands[index] = [(name, absolute(name)) for name in (reader_operands(segment) or [])]
             for name in literal_command_reads(segment):
                 path = absolute(name)
                 if path is not None and path.is_relative_to(root.resolve()):
-                    candidates.append(path)
+                    candidates.append((path, index, segment[0], name))
         else:
             return [], None
     paths = []
-    for path in candidates:
+    for path, index, reader, spelling in candidates:
+        errors = [line for line in diagnostics if re.match(r"(?:\S*/)?" + reader + r":", line)]
+
+        def failed_operand(name, absolute_name):
+            return any(re.search(r"(?<![\w./-])" + re.escape(alias) + r"(?![\w./-])", line)
+                       for alias in (name, str(absolute_name)) for line in errors)
+
+        if failed_operand(spelling, path):
+            continue
+        # A failed final reader can still return other operands successfully.
+        # Require an identified sibling failure to explain its nonzero status.
+        if not success and index == len(segments) - 1 and not any(
+                name != spelling and failed_operand(name, resolved) for name, resolved in operands[index]):
+            continue
         try:
             content = path.read_text().rstrip("\n")
         except (OSError, UnicodeError):
@@ -275,6 +493,31 @@ def selection_object(pairs):
             raise ValueError("duplicate selection key")
         report[key] = value
     return report
+
+
+def undecorated_selection_line(line):
+    """Recognize decorated assertions without accepting them as canonical fields."""
+    previous = None
+    while line != previous:
+        previous = line
+        for link in reversed(list(re.finditer(r"\[([^\[\]]*)\]\(", line))):
+            depth, end = 1, link.end()
+            quote = None
+            while end < len(line) and depth:
+                if line[end] == "\\":
+                    end += 2
+                    continue
+                if line[end] in ("'", '"') and (quote is None or quote == line[end]):
+                    quote = line[end] if quote is None else None
+                elif quote is None:
+                    depth += (line[end] == "(") - (line[end] == ")")
+                end += 1
+            if not depth:
+                line = line[:link.start()] + link[1] + line[end:]
+        line = re.sub(r"<[^>]*>", "", line)
+        line = re.sub(r"[*_`~]", "", line)
+        line = re.sub(r"^\s*(?:>\s*|[-+]\s+|\d+[.)]\s+)", "", line)
+    return line
 
 
 def selection_report(text_blocks, final_text, errors):
@@ -325,11 +568,35 @@ def selection_report(text_blocks, final_text, errors):
                 remainder[index] = " "
     residue_lines = "".join(remainder).splitlines()
     labels = {"Delivery owner": "delivery_owner", "History to recheck": "history_to_recheck"}
+    marker = markers[0] if len(markers) == 1 else None
+    valid_marker = (isinstance(marker, dict)
+                    and isinstance(marker.get("delivery_owner"), str)
+                    and marker["delivery_owner"] in DELIVERY_OWNERS
+                    and selection_history(marker.get("history_to_recheck")))
     report = {}
     seen = set()
     for line, residue in zip(final_text.splitlines(), residue_lines):
+        undecorated = undecorated_selection_line(residue)
+        assertion = re.search(r"\b(delivery\s+owner|history\s+to\s+recheck)\s*:\s*(.*)",
+                              undecorated, re.I)
         match = re.fullmatch(r"(Delivery owner|History to recheck):[ \t]*(.*)", line.strip())
         if not match:
+            # Supplemental prose is not a report. Compare only explicit owner
+            # or history assertions with an independently valid JSON marker.
+            if assertion and valid_marker:
+                label, value = assertion[1].lower(), assertion[2].strip()
+                if label.startswith("delivery"):
+                    owner = value.split()[0] if value else ""
+                    if owner in DELIVERY_OWNERS and DELIVERY_OWNERS[owner] != DELIVERY_OWNERS.get(marker.get("delivery_owner")):
+                        errors.append("contradictory selection reports: delivery_owner")
+                else:
+                    try:
+                        history = [] if value in ("none", "nothing") else json.loads(value)
+                    except ValueError:
+                        history = None
+                    if isinstance(history, list) and history != marker.get("history_to_recheck"):
+                        errors.append("contradictory selection reports: history_to_recheck")
+                continue
             if seen and residue.strip():
                 errors.append("unlabeled continuation after selection field")
             continue
@@ -351,7 +618,6 @@ def selection_report(text_blocks, final_text, errors):
                 errors.append("malformed history re-check statement")
     if seen and set(report) != set(labels.values()):
         errors.append("incomplete labeled selection report")
-    marker = markers[0] if len(markers) == 1 else None
     if isinstance(marker, dict):
         for key, value in report.items():
             marked = marker.get(key)
@@ -369,6 +635,8 @@ def selection_report(text_blocks, final_text, errors):
 
 def selection_read_command(command):
     """Allow only selection reads/discovery; unknown shell behavior fails closed."""
+    if not command_printers_allowed(command):
+        return False
     words, _ = command_words(command, allow_variables=True)
     if not words:
         return False
@@ -399,7 +667,9 @@ def selection_read_command(command):
             return False
         name, *args = segment
         if name == "echo":
-            continue  # Variable interpolation is allowed only as printed text.
+            if not literal_print_output(segment, allow_expansions=True):
+                return False
+            continue
         if any("$" in word for word in segment):
             return False
         if name == "cd":
@@ -453,6 +723,12 @@ def returned_text(content):
         return "\n".join(block["text"] for block in content if isinstance(block, dict)
                          and block.get("type") == "text" and isinstance(block.get("text"), str))
     return ""
+
+
+def returned_file_data(output):
+    """Native Read reminders describe the tool result; they are not file data."""
+    return re.sub(r"<system-reminder>.*?(?:</system-reminder>|\Z)", "", output,
+                  flags=re.S).strip()
 
 
 def observe_transcript(transcript, root, host):
@@ -531,7 +807,7 @@ def observe_transcript(transcript, root, host):
                     paths, shell_cwd = completed_command_reads(
                         inputs.get("command", ""), shell_cwd, root, output, success)
                 else:
-                    paths = ([inputs["file_path"]] if success and output.strip()
+                    paths = ([inputs["file_path"]] if success and returned_file_data(output)
                              and inputs.get("file_path") else [])
                 for path in paths:
                     evidence["reads"].append({"path": read_path(path, root, host),

@@ -152,6 +152,15 @@ class HarnessTests(unittest.TestCase):
         self.assertIn('incomplete selection boundary', result['failures'])
         self.assertIsNone(result['evidence']['selection'])
 
+    def test_recorded_hillclimb_prose_owner_agrees_with_valid_marker(self):
+        fixture = json.loads((HERE / 'fixtures/selection/claude-hillclimb-prose-owner.json').read_text())
+        case = next(case for case in CASES if case['id'] == fixture['id'])
+        events = [entry['event'] for entry in fixture['events']]
+        evidence = h.observe_transcript(encode(events), Path(fixture['root']), 'claude')
+        result = h.score_case(case, evidence)
+        self.assertTrue(result['pass'], result['failures'])
+        self.assertEqual(evidence['selection'], dict(delivery_owner='hillclimb', history_to_recheck=[]))
+
     def test_labeled_report_still_requires_observed_skill_and_ordered_reads(self):
         case = next(case for case in CASES if case['id'] == PLACEHOLDER['id'])
         events = transcript(case, self.root)
@@ -302,6 +311,237 @@ class HarnessTests(unittest.TestCase):
                 self.assertEqual(result['pass'], nonempty, result['failures'])
                 if not nonempty:
                     self.assertIn('missing reads: ' + self.case['expected_reads'][1], result['failures'])
+
+    def test_native_read_offset_warning_is_not_file_data(self):
+        warning = ('<system-reminder>Warning: the file exists but is shorter than the '
+                   'provided offset (999999). The file has 2 lines.</system-reminder>')
+        for content in (warning, [{'type': 'text', 'text': warning}]):
+            events = transcript(self.case, self.root)
+            events[4]['message']['content'][0]['input'].update(offset=999999, limit=10)
+            events[5]['message']['content'][0]['content'] = content
+            with self.subTest(content=content):
+                result = self.grade(events)
+                self.assertFalse(result['pass'])
+                self.assertNotIn(self.case['expected_reads'][1], result['read_paths'])
+
+    def test_failed_shell_reader_cannot_borrow_echo_output(self):
+        path = self.root / '.claude/skills' / self.case['expected_reads'][1]
+        path.parent.mkdir(parents=True)
+        path.write_text('A distinctive reference.\nIts complete contents.\n')
+        command = f'cat -Z {path}; echo {h.shlex.quote(path.read_text())}'
+        events = transcript(self.case, self.root)
+        events[4:6] = [tool('Bash', {'command': command}, 'spoofed-read'),
+                       dict(type='user', message={'content': [dict(
+                           type='tool_result', tool_use_id='spoofed-read',
+                           content='cat: invalid option -- Z\n' + path.read_text(), is_error=False)]})]
+        result = self.grade(events)
+        self.assertFalse(result['pass'])
+        self.assertNotIn(self.case['expected_reads'][1], result['read_paths'])
+        self.assertIn('missing reads: ' + self.case['expected_reads'][1], result['failures'])
+        codex = dict(type='item.completed', item=dict(
+            id='spoofed-read', type='command_execution', command=command,
+            aggregated_output=path.read_text(), exit_code=0))
+        self.assertEqual(h.observe_transcript(encode([codex]), self.root, 'codex')['reads'], [])
+        for command, success, diagnostic in ((f'cat {path}', False, ''),
+                (f'cat -Z {path}; ls', True, 'cat: illegal option -- Z\n'),
+                (f'cat -Z {path}; ls missing', False, 'cat: invalid option -- Z\n'),
+                (f'head -Z {path}; ls', True, 'head: illegal option -- Z\n'),
+                (f'tail -Z {path}; ls', True, 'tail: unrecognized option -- Z\n'),
+                (f'sed -n 1p {path}; ls', True, f"sed: can't read {path}: Permission denied\n")):
+            with self.subTest(command=command, success=success):
+                self.assertEqual(h.completed_command_reads(
+                    command, self.root, self.root, diagnostic + path.read_text(), success)[0], [])
+        # Printed content alone cannot prove a read even if diagnostics are absent.
+        for printer in (f'echo {h.shlex.quote(path.read_text())}',
+                        f"printf '%s' {h.shlex.quote(path.read_text())}"):
+            command = f'cat -Z {path}; ' + printer
+            with self.subTest(printer=printer):
+                self.assertEqual(h.completed_command_reads(
+                    command, self.root, self.root, path.read_text(), True)[0], [])
+
+    def test_marker_compares_decorated_owner_and_history_labels(self):
+        for assertion in ('delivery owner: retrospective', '**Delivery owner:** retrospective',
+                          '- Delivery owner: retrospective', 'DELIVERY OWNER: retrospective',
+                          'history to recheck: [2]', '**History to recheck:** [2]',
+                          '> History to recheck: [2]', 'HISTORY TO RECHECK: [2]'):
+            events = transcript(self.case, self.root)
+            events[-2]['message']['content'][0]['text'] += '\n' + assertion
+            with self.subTest(assertion=assertion):
+                result = self.grade(events)
+                self.assertFalse(result['pass'])
+                self.assertTrue(any('contradictory selection reports:' in reason
+                                    for reason in result['failures']), result['failures'])
+        for assertion in ('delivery owner: software-change',
+                          '**Delivery owner:** software-change supplies delivery',
+                          '**Delivery owner:** the task follows the chosen playbook',
+                          'history to recheck: []', '**History to recheck:** none',
+                          '> History to recheck: nothing',
+                          '**History to recheck:** no inherited claims exist'):
+            events = transcript(self.case, self.root)
+            events[-2]['message']['content'][0]['text'] += '\n' + assertion
+            with self.subTest(assertion=assertion):
+                result = self.grade(events)
+                self.assertTrue(result['pass'], result['failures'])
+
+    def test_honest_bounded_native_and_plain_shell_reads_still_pass(self):
+        path = self.root / '.claude/skills' / self.case['expected_reads'][1]
+        path.parent.mkdir(parents=True)
+        path.write_text('A real reference.\nIts second line.\n')
+        events = transcript(self.case, self.root)
+        events[4]['message']['content'][0]['input'].update(offset=1, limit=1)
+        events[5]['message']['content'][0]['content'] = [dict(
+            type='text', text='     1→A real reference.\n<system-reminder>Read guidance.</system-reminder>')]
+        result = self.grade(events)
+        self.assertTrue(result['pass'], result['failures'])
+        for command in (f'cat {path}', f"sed -n '1,2p' {path}"):
+            events = transcript(self.case, self.root)
+            events[4:6] = [tool('Bash', {'command': command}, 'honest-read'),
+                           dict(type='user', message={'content': [dict(
+                               type='tool_result', tool_use_id='honest-read',
+                               content=path.read_text(), is_error=False)]})]
+            with self.subTest(command=command):
+                result = self.grade(events)
+                self.assertTrue(result['pass'], result['failures'])
+                codex = dict(type='item.completed', item=dict(
+                    id='honest-read', type='command_execution', command=command,
+                    aggregated_output=path.read_text(), exit_code=0))
+                self.assertEqual(len(h.observe_transcript(encode([codex]), self.root, 'codex')['reads']), 1)
+
+    def shell_reference(self):
+        path = self.root / '.claude/skills' / self.case['expected_reads'][1]
+        path.parent.mkdir(parents=True)
+        path.write_text('A distinctive reference whose contents exceed the printer literal cap.\n'
+                        'Every line must come from the reader.\n')
+        return path, path.read_text()
+
+    def shell_events(self, command, output, success=True):
+        events = transcript(self.case, self.root)
+        events[4:6] = [tool('Bash', {'command': command}, 'shell-reference'),
+                       dict(type='user', message={'content': [dict(
+                           type='tool_result', tool_use_id='shell-reference',
+                           content=output, is_error=not success)]})]
+        return events
+
+    def test_printer_collision_cannot_forge_empty_head_read(self):
+        path, content = self.shell_reference()
+        command = f'head -n 0 {path}; echo x; echo {h.shlex.quote(content + "x")}'
+        result = self.grade(self.shell_events(command, 'x\n' + content + 'x\n'))
+        self.assertFalse(result['pass'])
+        self.assertNotIn(self.case['expected_reads'][1], result['read_paths'])
+        self.assertIn('continued beyond selection boundary', result['failures'])
+        printers = ("printf '%s' x", 'echo -e x', 'echo -n x', 'echo -E x',
+                    'echo -en x', r"echo 'a\b'", r'echo a\b', 'echo %s',
+                    'echo ' + 'x' * 40, 'echo short#' + 'x' * 40,
+                    'echo ' + "'" + '${VAR:-' + 'x' * 40 + '}' + "'",
+                    'echo ' + "'" + 'x' * 20 + "''" + 'x' * 20 + "'",
+                    "cat <<'EOF'\nprinted text\nEOF")
+        for printer in printers:
+            command = f'cat {path}; ' + printer
+            with self.subTest(printer=printer):
+                result = self.grade(self.shell_events(command, content))
+                self.assertFalse(result['pass'])
+                self.assertNotIn(self.case['expected_reads'][1], result['read_paths'])
+                self.assertIn('continued beyond selection boundary', result['failures'])
+
+    def test_escaped_echo_cannot_forge_failed_head_read(self):
+        path, content = self.shell_reference()
+        escaped = ''.join(f'\\x{byte:02x}' for byte in content.encode())
+        command = f'head -n bad {path}; echo -e {h.shlex.quote(escaped)}'
+        result = self.grade(self.shell_events(command, content))
+        self.assertFalse(result['pass'])
+        self.assertNotIn(self.case['expected_reads'][1], result['read_paths'])
+        self.assertIn('continued beyond selection boundary', result['failures'])
+
+    def test_marker_compares_linked_selection_labels(self):
+        for assertion in ('[Delivery owner](#owner): retrospective',
+                          '[History to recheck](#history): [2]',
+                          '<strong>Delivery owner</strong>: retrospective',
+                          '> 1. **[History to recheck](#history)**: [2]',
+                          '[Delivery owner](https://example.test/(nested/(owner))): retrospective',
+                          '[Delivery owner](#owner "Delivery"): retrospective',
+                          '[History to recheck](#history "Recheck (maybe"): [2]',
+                          '`Delivery owner`: retrospective',
+                          '<em>delivery</em> <b>owner</b>: retrospective'):
+            events = transcript(self.case, self.root)
+            events[-2]['message']['content'][0]['text'] += '\n' + assertion
+            with self.subTest(assertion=assertion):
+                result = self.grade(events)
+                self.assertFalse(result['pass'])
+                self.assertTrue(any('contradictory selection reports:' in reason
+                                    for reason in result['failures']), result['failures'])
+        for assertion in ('[Delivery owner](#owner "Delivery"): software-change',
+                          '[History to recheck](#history "Recheck (maybe"): []',
+                          '[Delivery owner](#owner): the deliverable follows planning'):
+            events = transcript(self.case, self.root)
+            events[-2]['message']['content'][0]['text'] += '\n' + assertion
+            with self.subTest(assertion=assertion):
+                result = self.grade(events)
+                self.assertTrue(result['pass'], result['failures'])
+
+    def test_cat_credits_successful_operand_when_another_operand_fails(self):
+        path, content = self.shell_reference()
+        command = f'cat {path} missing.md'
+        result = self.grade(self.shell_events(
+            command, content + 'cat: missing.md: No such file or directory\n', False))
+        self.assertTrue(result['pass'], result['failures'])
+        self.assertIn(self.case['expected_reads'][1], result['read_paths'])
+        for printer, credited, breach in (
+                ('echo', True, False), ('echo ---', True, False),
+                ('echo ' + 'x' * 39, False, True), ("echo '$VAR'", False, False),
+                ('echo $VAR', False, False), ('echo ${VAR}', False, False),
+                ('echo ${VAR:-fallback}', False, False),
+                ('echo "PR=${PLUGIN_ROOT:-} CPR=${CLAUDE_PLUGIN_ROOT:-}"', False, False),
+                ('echo "PR=${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}"', False, False)):
+            with self.subTest(printer=printer):
+                result = self.grade(self.shell_events(f'cat {path}; ' + printer, content))
+                self.assertEqual(result['pass'], credited, result['failures'])
+                self.assertEqual(self.case['expected_reads'][1] in result['read_paths'], credited)
+                self.assertEqual('continued beyond selection boundary' in result['failures'], breach)
+
+    def test_variable_commands_and_text_printers_never_earn_read_credit(self):
+        path, content = self.shell_reference()
+        other = self.root / 'other.md'
+        other.write_text('')
+        commands = [f"sed -n '999p' {path}; echo {h.shlex.quote(line)}"
+                    for line in content.splitlines()]
+        for operation in ('i', 'a', 'c'):
+            script = '1' + operation + '\\' + content.rstrip('\n')
+            commands.append(f"sed -n '999p' {path}; sed {h.shlex.quote(script)} {other}")
+        commands += [f"cat {path}; echo '<<'", f"cat {path}; printf '%s' ---"]
+        for command in commands:
+            with self.subTest(command=command):
+                result = self.grade(self.shell_events(command, content))
+                self.assertFalse(result['pass'])
+                self.assertNotIn(self.case['expected_reads'][1], result['read_paths'])
+                self.assertIn('continued beyond selection boundary', result['failures'])
+
+    def test_later_invalid_reader_keeps_earlier_read_credit(self):
+        path, content = self.shell_reference()
+        (self.root / 'other.md').write_text('A different file.\n')
+        command = f'cat {path}; cat -Z other.md'
+        result = self.grade(self.shell_events(command, content + 'cat: illegal option -- Z\n', False))
+        self.assertTrue(result['pass'], result['failures'])
+        self.assertIn(self.case['expected_reads'][1], result['read_paths'])
+        self.assertNotIn('other.md', result['read_paths'])
+
+    def test_shell_comment_preserves_read_credit_and_selection_boundary(self):
+        path, content = self.shell_reference()
+        result = self.grade(self.shell_events(f'cat {path} # Read; no edits', content))
+        self.assertTrue(result['pass'], result['failures'])
+        self.assertIn(self.case['expected_reads'][1], result['read_paths'])
+
+    def test_echo_descriptor_redirection_is_not_printed_text(self):
+        path, content = self.shell_reference()
+        result = self.grade(self.shell_events(f'cat {path}; echo --- 1>&2', content + '---\n'))
+        self.assertTrue(result['pass'], result['failures'])
+        self.assertIn(self.case['expected_reads'][1], result['read_paths'])
+
+    def test_long_variable_diagnostic_has_no_credit_or_boundary_breach(self):
+        command = 'echo "Plugin root is $PLUGIN_ROOT and installation root is $CLAUDE_PLUGIN_ROOT"'
+        result = self.grade(self.shell_events(command, 'Plugin root is /plugin and installation root is /install\n'))
+        self.assertFalse(result['pass'])
+        self.assertNotIn(self.case['expected_reads'][1], result['read_paths'])
+        self.assertEqual(result['failures'], ['missing reads: ' + self.case['expected_reads'][1]])
 
     def test_compound_shell_reads_require_literal_commands_and_returned_file_content(self):
         folder = self.root.resolve() / 'a folder'

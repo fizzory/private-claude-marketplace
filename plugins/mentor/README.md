@@ -644,6 +644,15 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
 
+## Changes in v6.4.1
+
+Compatibility decision: **non-breaking: eval scoring fixes; no workflow or durable-state change**.
+
+- Native Read warnings and reminder metadata no longer count as returned file data.
+- Shell read credit keeps punctuation-only echo separators and per-path failures; `$` commands earn none.
+- Decorated owner/history assertions are compared with the marker; honest prose remains valid.
+- Eval documentation names the isolated-session threat model and unsupported evidence forms.
+
 ## Changes in v6.4.0
 
 Compatibility decision: **minor release by owner decision; two public playbook skills are removed.**

@@ -139,20 +139,35 @@ integer step numbers. The labeled history also accepts exactly `none` or `nothin
 explanation or punctuation after the value. No unlabeled continuation may follow a field;
 only the other field or a standalone marker may follow. Marker and labeled values must
 agree when both occur, including an earlier marker followed by a final labeled report.
-An earlier marker alone cannot replace a final report. Prose and decorated labels do not
-supply missing fields. Actual reads are independently scored from completed tool events,
+An earlier marker alone cannot replace a final report. Prose does not supply missing fields.
+With a valid marker, supplemental labels are compared after removing Markdown/HTML decoration
+and matching labels case-insensitively: a known owner as the first token, or a JSON history
+array/`none`/`nothing`, must agree with the marker. Prose values remain commentary.
+Actual reads are independently scored from completed tool events,
 never from that self-report or a mention in prose.
 
-The parser credits successful `Read` calls only with non-empty returned text. Literal
+The parser credits successful `Read` calls only with non-empty returned file data;
+system-reminder metadata alone does not count. Literal
 `cat`/`sed`/`head`/`tail` commands also require non-empty returned text containing the staged
 file's full contents, including for shell sequences with `cd`, `;` or `&&`. It tracks Claude's
 working directory across completed calls. An earlier proven read still counts when a
 later command fails; a failed read, path mention or unsupported shell expression does not.
+Reader syntax and path-specific diagnostics separate successful reads from failures of
+another operand or later segment. A command containing `$` earns no read credit;
+variable echo diagnostics do not by themselves breach selection. Commands earning read
+credit allow only bare echo or punctuation-only literals under 40 characters, without
+flags, escapes or `%`. Other echo literals, `printf`, heredocs and sed text commands
+(`i`, `a`, `c`) earn zero credit for the whole command and breach selection.
 Index completion must precede each playbook read request;
 parallel index/playbook reads fail. Search results, failed or unfinished reads and partial
 stream arguments do not count. All expected read paths must occur and no other indexed
 playbook may load. Selection continues past the planning Skill event until a complete
 transcript and one selection-boundary report are observed.
+
+**Threat model.** The scorer guards against honest model mistakes in isolated sessions,
+not deliberate transcript forgery. Escaped or entity colons in labels are not recognized.
+`echo '<<'` is rejected fail-closed. Pipelines, loops, `nl` and variable operands as
+readers are unsupported as read evidence.
 
 | Case | Expected skill | Expected index/playbooks | Delivery owner |
 |---|---|---|---|

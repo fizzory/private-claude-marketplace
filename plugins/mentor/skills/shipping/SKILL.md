@@ -1,6 +1,6 @@
 ---
 name: shipping
-description: Finish the current branch — clean-check, run /simplify, run tests, then push and open a PR/MR (or push to the branch's upstream), with the plan's Done review in the PR body. Standalone it asks for the test step and the target; inside a mentor plan run (the software playbook's deliver mode) it proceeds without asking and pauses only on always-pause items. Never force-pushes; never pushes to a protected branch without an explicit choice. Invoked by /mentor:ship, "ship this", "merge and push", "finish and ship", and by playbook-software-change.
+description: Finish the current branch — clean-check, run /simplify, run tests, then push and open a PR/MR (or push to the branch's upstream), with the plan's Done review in the PR body. Standalone it asks for the test step and the target; inside a mentor plan run (the software playbook's deliver mode) it proceeds without asking and pauses only on always-pause items. Never force-pushes; never pushes to a protected branch without an explicit choice. Invoked by /mentor:ship, "ship this", "merge and push", "finish and ship", and by planning's software-change playbook.
 ---
 
 # ship — Ship the current branch
@@ -20,7 +20,7 @@ replaced by the bullet here:
 
 - **Standalone** (`/mentor:ship` with no plan run active): the human chose to ship by
   hand, so Steps 4 and 5 ask, exactly as written.
-- **Inside a plan run** — `playbook-software-change`'s deliver mode called this skill
+- **Inside a plan run** — the [software-change playbook](../planning/references/playbooks/software-change.md)'s deliver mode called this skill
   for an approved plan whose stored state is `in_progress`. The approval was the human's
   one gate (AGENTS.md → Mentor core concept), so:
   - **Step 1 on-base:** cut the feature branch `git switch -c <type>/<slug>` without
@@ -31,8 +31,10 @@ replaced by the bullet here:
   - **Step 3 out-of-scope files** from simplify: include in-scope only, log the rest as
     a `review?: needed` row. Never "include all" without a human.
   - **Step 4 tests:** no question. Run the plan's Definition of done commands (the
-    playbook's overlay, the constitution, or the Step 4 ladder). A failure **stops the
-    ship** — there is no "Ship anyway" inside a run; it re-enters the run's re-plan path.
+    playbook's overlay, the constitution, or the Step 4 ladder), or apply
+    `planning/references/verifier-contract.md` → **Evidence reuse**, rechecking
+    eligibility after `/simplify`. A failure **stops the ship** — there is no "Ship
+    anyway" inside a run; it re-enters the run's re-plan path.
   - **Step 5 target:** no question. **5A** (push the feature branch + open the PR/MR).
     Push to the base or a protected branch is always-pause.
   - **PR body:** the plan's `## Done review` plus the decision log grouped by use case,

@@ -271,9 +271,17 @@ rm -rf "$PLANS"
 echo "== B10. mentor_plan_tick_step — the write-side counterpart, sharing B9's pattern =="
 mkdir -p "$PLANS/ts"
 printf '# t\n## Implementation steps\n1. one\n2. two\n## Verification\n1. not a step\n' > "$PLANS/ts/plan.md"
+before_tick="$(cksum "$PLANS/ts/plan.md")"
+out="$(libsh "mentor_plan_tick_step '$PLANS/ts/plan.md' 1" 2>"$ROOT/tick-err")"; rc=$?
+chk "direct helper without saved verdict → rc 1" test "$rc" = 1
+chk "direct helper refusal → names file and fix" bash -c 'grep -Fq "$1/verdicts/step-1.md" "$2" && grep -Fq "Fix:" "$2"' _ "$PLANS/ts" "$ROOT/tick-err"
+chk "direct helper refusal → plan unchanged" test "$(cksum "$PLANS/ts/plan.md")" = "$before_tick"
+mkdir -p "$PLANS/ts/verdicts"
+printf 'Verdict: PASS\nGrade: Step 1\n' > "$PLANS/ts/verdicts/step-1.md"
 chk "tick step 1 → status line" test "$(libsh "mentor_plan_tick_step '$PLANS/ts/plan.md' 1")" = "ticked 1 2"
 chk "tick step 1 → the ✅ landed on line 3, not line 5's lookalike" \
   bash -c "sed -n '3p' '$PLANS/ts/plan.md' | grep -qF '✅' && ! sed -n '6p' '$PLANS/ts/plan.md' | grep -qF '✅'"
+rm "$PLANS/ts/verdicts/step-1.md"
 chk "re-tick the same step → already, no rewrite" test "$(libsh "mentor_plan_tick_step '$PLANS/ts/plan.md' 1")" = "already 1 2"
 chk "tick counts now read 1 2 back"     test "$(libsh "mentor_plan_tick_counts '$PLANS/ts/plan.md'")" = "1 2"
 out="$(libsh "mentor_plan_tick_step '$PLANS/ts/plan.md' 99" 2>/dev/null)"; rc=$?
@@ -290,12 +298,16 @@ rm -rf "$PLANS"
 echo "== B10c. mentor_plan_tick_step — a wrapped-prose false positive above a step must not shift its ordinal =="
 mkdir -p "$PLANS/ord"
 printf '# t\n## Implementation steps\n1. one\nStep 4.1'"'"'s design output is ready\n2. two\n' > "$PLANS/ord/plan.md"
+mkdir -p "$PLANS/ord/verdicts"
+printf 'Verdict: PASS\nGrade: Step 2\n' > "$PLANS/ord/verdicts/step-2.md"
 chk "tick step 2 → status line" test "$(libsh "mentor_plan_tick_step '$PLANS/ord/plan.md' 2")" = "ticked 2 2"
 chk "tick step 2 → the ✅ landed on the real '2. two' line" \
   bash -c "sed -n '5p' '$PLANS/ord/plan.md' | grep -qF '2. two ✅'"
 rm -rf "$PLANS"
 mkdir -p "$PLANS/ord2"
 printf '# t\n## Implementation steps\n1. one\nInputs: rows 7, 17, 42,\n    48, 55, 61, 66); final descriptions.\n2. two\n' > "$PLANS/ord2/plan.md"
+mkdir -p "$PLANS/ord2/verdicts"
+printf 'Verdict: PASS\nGrade: Step 2\n' > "$PLANS/ord2/verdicts/step-2.md"
 chk "tick step 2 → status line (the wrapped '48, ' line is not a step)" \
   test "$(libsh "mentor_plan_tick_step '$PLANS/ord2/plan.md' 2")" = "ticked 2 2"
 chk "tick step 2 → the ✅ landed on '2. two', not the wrapped prose" \
@@ -305,6 +317,8 @@ rm -rf "$PLANS"
 echo "== B10b. mentor_plan_tick_step — H3-heading step format, sharing B9b's pattern =="
 mkdir -p "$PLANS/tsh"
 printf '# t\n## Implementation steps\n### 1. One\n### 2. Two\n' > "$PLANS/tsh/plan.md"
+mkdir -p "$PLANS/tsh/verdicts"
+printf 'Verdict: PASS\nGrade: Step 1\n' > "$PLANS/tsh/verdicts/step-1.md"
 chk "tick H3 step 1 → status line" test "$(libsh "mentor_plan_tick_step '$PLANS/tsh/plan.md' 1")" = "ticked 1 2"
 chk "tick H3 step 1 → the ✅ landed on the heading line" \
   bash -c "sed -n '3p' '$PLANS/tsh/plan.md' | grep -qF '✅'"

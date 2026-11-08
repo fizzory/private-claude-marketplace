@@ -116,6 +116,10 @@ Everything workers need is resolved here, because workers must not fan out furth
 | Repo code or a subsystem | the real file paths. When the area is broad, one read-only research worker (or the same survey serially) writes FINDINGS with `file:line` EVIDENCE to `_brief.md` |
 | No file (the conversation, facts gathered live from a CLI or API) | the main thread distills it into `_brief.md` |
 
+Open every brief with the plan-level Goal: line verbatim; for a missing line or plan,
+follow planning's [Role resolution](../planning/SKILL.md#decision-maker) fallback rule.
+This keeps research, trace, probe, fragment and revision work tied to the requested outcome.
+
 Every brief carries the rule **invent nothing**: every claim, string, colour and step traces to the source pack
 or to the plan. **Research is read-only**, in the main thread and in every worker: files and git, never a
 command against a running service, container or database, not even a rolled-back one (contract §1). A

@@ -78,6 +78,10 @@ clear_plans() { rm -rf "$PLANS_DIR"/*/ 2>/dev/null; rm -f "$PLANS_DIR"/*.md; }
 sidecar() { jq -r "${2}" "$PLANS_DIR/$1/.state.json" 2>/dev/null; }   # sidecar <slug> <jq filter>
 psq() { ( cd "$REPO" && HOME="$SANDBOX" env -u CLAUDE_CODE_SESSION_ID bash "$PLANSTATE" "$@" 2>/dev/null ); }
 psq_b() { ( cd "$WTB" && HOME="$SANDBOX" env -u CLAUDE_CODE_SESSION_ID bash "$PLANSTATE" "$@" 2>/dev/null ); }
+saved_pass() {
+  mkdir -p "$PLANS_DIR/$1/verdicts"
+  printf 'Verdict: PASS\nGrade: Step %s\n' "$2" > "$PLANS_DIR/$1/verdicts/step-$2.md"
+}
 
 echo "== A. No plan → gate stays closed =="
 sm plan
@@ -111,6 +115,13 @@ chk "fresh plan → APPROVED message"    sh -c "printf '%s' \"\$0\" | grep -q 'P
 chk "fresh plan → plan path printed"   sh -c "printf '%s' \"\$0\" | grep -q 'fixture-plan/plan.md'" "$out"
 chk "fresh plan → run directive" sh -c "printf '%s' \"\$0\" | grep -q 'Run the plan until its Goal check passes'" "$out"
 chk "fresh plan → directive names verifier, Verification, Goal check, Done review" sh -c "printf '%s' \"\$0\" | grep -q 'verifier-contract.md' && printf '%s' \"\$0\" | grep -q '## Verification' && printf '%s' \"\$0\" | grep -q '## Goal check' && printf '%s' \"\$0\" | grep -q '## Done review'" "$out"
+directive_lines="$(printf '%s\n' "$out" | awk '
+  /^Run the plan until its Goal check passes/ { in_directive = 1 }
+  in_directive && /^$/ { exit }
+  in_directive { count++ }
+  END { print count + 0 }
+')"
+chk "directive-at-most-six-lines: Proceed directive stays a pointer" test "$directive_lines" -le 6
 chk "fresh plan, no session id → no run marker" sh -c "! ls '$STATE_DIR'/.run-* >/dev/null 2>&1"
 chk "fresh plan → no removed-skill routing" sh -c "! printf '%s' \"\$0\" | grep -qE 'dispatch-agents|Dispatch: skipped|/mentor:handoff|claim'" "$out"
 
@@ -412,6 +423,7 @@ rm -f "$MARKER"
 # effective state, so the check keys on the stored one.
 mkdir -p "$PLANS_DIR/q-ticked"
 printf '# Plan\n\n## Implementation steps\n\n1. One.\n2. Two.\n' > "$PLANS_DIR/q-ticked/plan.md"
+saved_pass q-ticked 1
 psq init q-ticked >/dev/null; psq set q-ticked approved >/dev/null; psq tick q-ticked 1 >/dev/null
 out="$(bp q-ticked)"
 chk "approved+ticked 1/2 → ALREADY APPROVED"          sh -c "printf '%s' \"\$0\" | grep -q '^ALREADY APPROVED: q-ticked'" "$out"
@@ -424,6 +436,7 @@ rm -f "$MARKER"
 # Fully ticked: effective state is implemented, past approval — arms as before.
 mkdir -p "$PLANS_DIR/q-done"
 printf '# Plan\n\n## Implementation steps\n\n1. One.\n' > "$PLANS_DIR/q-done/plan.md"
+saved_pass q-done 1
 psq init q-done >/dev/null; psq set q-done approved >/dev/null; psq tick q-done 1 >/dev/null
 out="$(bp q-done)"
 chk "approved but fully ticked → arms"                sh -c "printf '%s' \"\$0\" | grep -q 'Plan phase ARMED'" "$out"
@@ -432,6 +445,7 @@ rm -f "$MARKER"
 # review and delivery — resume it (After Proceed step 6), never re-arm.
 mkdir -p "$PLANS_DIR/q-run"
 printf '# Plan\n\n## Implementation steps\n\n1. One.\n' > "$PLANS_DIR/q-run/plan.md"
+saved_pass q-run 1
 psq init q-run >/dev/null; psq set q-run in_progress >/dev/null; psq tick q-run 1 >/dev/null
 out="$(bp q-run)"; rc=$?
 chk "in_progress fully ticked → exit 0"               test "$rc" = "0"
@@ -458,7 +472,7 @@ echo "== R. Approval re-anchors the run after mentor writes and ticks =="
 output_has() { printf '%s\n' "$out" | grep -Fqx -- "$1"; }
 output_lacks() { ! printf '%s\n' "$out" | grep -Fq -- "$1"; }
 change_notice='plan.md changed since mentor last wrote it — read it before editing it further'
-tick_instruction='tick each step with `plan-state.sh tick` after its PASS row'
+tick_instruction='tick each step with `plan-state.sh tick` after saving verdicts/step-N.md → PASS row → record-write'
 clear_plans; rm -f "$MARKER" "$MARKER_B" "$LEGACY_MARKER"
 arm; sleep 1
 mkdir -p "$PLANS_DIR/anchor-run"
@@ -477,6 +491,7 @@ The change is verified.
 EOF
 psq init anchor-run >/dev/null
 psq record-write anchor-run >/dev/null
+saved_pass anchor-run 1
 psq tick anchor-run 1 >/dev/null
 before_plan="$(cksum "$PLANS_DIR/anchor-run/plan.md")"
 before_hash="$(sidecar anchor-run '.plan_sha256')"
@@ -520,6 +535,8 @@ expected_anchor="$(printf '  plan: %s\n  planning ended — edit gate released' 
 chk "deliver anchor block is last" test "$(printf '%s\n' "$out" | tail -n 2)" = "$expected_anchor"
 
 echo "== R4. Fully ticked steps never invent another step =="
+saved_pass anchor-run 2
+saved_pass anchor-run 3
 psq tick anchor-run 2 >/dev/null
 psq tick anchor-run 3 >/dev/null
 out="$(ap)"; rc=$?

@@ -5,7 +5,7 @@
 # to the approval options — the persisted repo mode is NOT read here; the
 # user's explicit choice decides:
 #   (no arg)   — approve: validate, release the gate, implementation begins;
-#                prints the main-thread implementation directive.
+#                points to planning's After Proceed directive.
 #   --deliver  — approve, but the plan file is the DELIVERABLE: prints a
 #                DELIVER-ONLY soft-stop directive (no implementation).
 #   anything else — usage error, exit 1, marker untouched. (--handoff retired in
@@ -423,7 +423,7 @@ _approval_anchor() {
   fi
   echo "  planning ended — edit gate released"
   if [ "$flag" != "--deliver" ]; then
-    echo '  tick each step with `plan-state.sh tick` after its PASS row'
+    echo '  tick each step with `plan-state.sh tick` after saving verdicts/step-N.md → PASS row → record-write'
   fi
   return 0
 }
@@ -460,17 +460,12 @@ if [ "$this_session" != "nosession" ] && [ -n "$run_slug" ]; then
   fi
 fi
 
-# Restate the run directive here — informational only — because this is the exact
-# moment the model resumes after the Bash call.
+# Point to the single full directive as the model resumes after the Bash call.
 cat <<EOF
 
-Run the plan until its Goal check passes (planning → "After Proceed"):
-  plan-state.sh set ${run_slug:-<slug>} in_progress, then build each step in order.
-  After each step, dispatch a fresh verifier (planning/references/verifier-contract.md);
-  tick only after its PASS row in ## Decision log. Log every decision you make.
-  Pause only for an always-pause item or a stop word ("stop", "pause", "wait"). When every step is ticked, grade the
-  ## Verification topics, write ## Done review, grade the ## Goal check against it,
-  deliver, then set the plan implemented — or failed, with --note "<why>".
+Run the plan until its Goal check passes — follow skills/planning/SKILL.md → "After Proceed".
+  Verifier contract: skills/planning/references/verifier-contract.md.
+  Completion sections: ## Verification, ## Done review, ## Goal check.
 EOF
 
 _approval_anchor

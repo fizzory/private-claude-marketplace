@@ -113,6 +113,10 @@ plan() { # <slug> [body line...]  — create a plan dir with a plan.md
   if [ "$#" -gt 0 ]; then printf '%s\n' "$@" > "$PLANS/$slug/plan.md"
   else printf '# %s\n' "$slug" > "$PLANS/$slug/plan.md"; fi
 }
+saved_pass() { # <slug> <step> — a returned grade saved before a fixture ticks
+  mkdir -p "$PLANS/$1/verdicts"
+  printf 'Verdict: PASS\nGrade: Step %s\nGrading: independent\n' "$2" > "$PLANS/$1/verdicts/step-$2.md"
+}
 # `list` columns: $1 ordinal · $2 STATE · $3 PLAN · $4 GROUP · $5 ORDER
 state_of() { psout list | awk -v s="$1" '$3 == s { print $2 }'; }
 slugs_in_order() { printf '%s' "$1" | awk 'NF && $1 ~ /^[0-9]+$/ { printf "%s ", $3 }'; }
@@ -520,6 +524,7 @@ chk "set on a legacy sidecar: state lands"      test "$(sidecar legacy-sc '.stat
 chk "set on a legacy sidecar: legacy keys kept" test "$(legacy_keys)" = "$before_keys"
 ps set-deps legacy-sc sd-c >/dev/null
 ps init legacy-sc --group lg >/dev/null
+saved_pass legacy-sc 1
 ps tick legacy-sc 1 >/dev/null
 ps set legacy-sc implemented >/dev/null
 chk "set-deps/init/tick/set: managed fields land" \
@@ -535,6 +540,7 @@ plan tk '# t' '## Implementation steps' \
   'Step 2 — second  [role: general-purpose]' '   Done when: it also works' \
   '1. **Numbered form**' '2. **Second numbered**' \
   '## Verification' 'Step 1 — prose about verification, not a real step'
+for n in 1 2 3 4; do saved_pass tk "$n"; done
 chk "before any tick: 0 ticked"          test "$(state_of tk)" = "unknown"
 out="$(ps tick tk 1)"; rc=$?
 chk "tick step 1 → exit 0"               test "$rc" = "0"
@@ -566,6 +572,86 @@ chk "the Verification section's own 'Step 1 —' line is never touched" \
   test "$before_verify" = "Step 1 — prose about verification, not a real step"
 ps tick tk 2 >/dev/null; ps tick tk 4 >/dev/null
 chk "all 4 steps ticked → derived state reaches implemented" test "$(state_of tk)" = "implemented"
+
+echo "== L2b. A new tick requires the latest saved step PASS =="
+TV_DIR="$PLANS/tick-verdict"
+TV_FILE="$TV_DIR/verdicts/step-1.md"
+tv_reset() {
+  rm -rf "$TV_DIR"
+  plan tick-verdict '# verdict check' '## Implementation steps' '1. First' '2. Second'
+  ps init tick-verdict >/dev/null
+  ps record-write tick-verdict >/dev/null
+  mkdir -p "$TV_DIR/verdicts"
+}
+tv_refused() { # <case> [expected file]
+  local label="$1" file="${2:-$TV_FILE}" before out rc
+  before="$(cksum "$TV_DIR/plan.md" "$TV_DIR/.state.json")"
+  out="$(ps tick tick-verdict 1)"; rc=$?
+  chk "$label → exit 1" test "$rc" = 1
+  chk "$label → names the verdict file" has "$file" "$out"
+  chk "$label → gives the fix" has "Fix:.*Verdict: PASS.*Step 1.*retry tick" "$out"
+  chk "$label → plan and sidecar unchanged" test "$(cksum "$TV_DIR/plan.md" "$TV_DIR/.state.json")" = "$before"
+}
+tv_accepted() { # <case>
+  local out rc
+  out="$(ps tick tick-verdict 1)"; rc=$?
+  chk "$1 → exit 0" test "$rc" = 0
+  chk "$1 → unchanged tick output" test "$out" = '[mentor plan-state] tick-verdict: step 1 ✅ ticked (1/2).'
+  chk "$1 → writes the step tick" has '^1\. First ✅$' "$(cat "$TV_DIR/plan.md")"
+}
+
+tv_reset
+tv_refused 'tick-verdict: missing'
+tv_reset; : > "$TV_FILE"
+tv_refused 'tick-verdict: empty'
+tv_reset; printf 'Verdict PASS\n' > "$TV_FILE"
+tv_refused 'tick-verdict: malformed'
+tv_reset; printf 'Verdict: FAIL\n' > "$TV_FILE"
+tv_refused 'tick-verdict: FAIL'
+tv_reset; printf 'Verdict: HANDBACK\n' > "$TV_FILE"
+tv_refused 'tick-verdict: HANDBACK'
+for grade in 'Step 2' 'Topic 1' 'Goal check' 'PR' 'Step 1 extra'; do
+  tv_reset; printf 'Verdict: PASS\nGrade: %s\n' "$grade" > "$TV_FILE"
+  tv_refused "tick-verdict: mismatched Grade ($grade)"
+done
+tv_reset; saved_pass tick-verdict 1
+tv_accepted 'tick-verdict: independent PASS'
+tv_reset; printf 'Verdict: PASS\nGrade: Step 1\nGrading: self-graded\n' > "$TV_FILE"
+tv_accepted 'tick-verdict: self-graded PASS'
+tv_reset; printf 'Verdict: PASS\n' > "$TV_DIR/step-1-verify.md"
+tv_accepted 'tick-verdict: legacy-path PASS'
+tv_reset; printf '<!-- verifier notes -->\n# Check\n\nVerdict: PASS\n' > "$TV_FILE"
+tv_accepted 'tick-verdict: comment-offset Verdict PASS'
+tv_reset; printf 'Verdict: PASS\ngRaDe: sTeP-1\n' > "$TV_FILE"
+tv_accepted 'tick-verdict: case-insensitive step-N Grade PASS'
+tv_reset; printf 'Verdict: PASS\nGRADE: sTeP 1\n' > "$TV_FILE"
+tv_accepted 'tick-verdict: case-insensitive Step N Grade PASS'
+tv_reset; saved_pass tick-verdict 1; ps tick tick-verdict 1 >/dev/null
+rm "$TV_FILE"
+before="$(cksum "$TV_DIR/plan.md" "$TV_DIR/.state.json")"
+out="$(ps tick tick-verdict 1)"; rc=$?
+chk 'tick-verdict: already-ticked without verdict → exit 0' test "$rc" = 0
+chk 'already-ticked without verdict → no write reported' has 'was already ✅' "$out"
+chk 'already-ticked without verdict → plan and sidecar unchanged' test "$(cksum "$TV_DIR/plan.md" "$TV_DIR/.state.json")" = "$before"
+tv_reset
+printf 'Verdict: PASS\n' > "$TV_DIR/verdicts/step-1-r2.md"
+printf 'Verdict: PASS\n' > "$TV_DIR/step-1-verify-r2.md"
+tv_refused 'tick-verdict: revision-only PASS rejected'
+tv_reset; printf 'Verdict: FAIL\n' > "$TV_FILE"
+printf 'Verdict: PASS\n' > "$TV_DIR/step-1-verify.md"
+tv_refused 'tick-verdict: canonical FAIL with legacy PASS rejected'
+tv_reset; saved_pass tick-verdict 1
+printf 'Verdict: FAIL\n' > "$TV_FILE"
+tv_refused 'tick-verdict: latest canonical FAIL overwriting prior PASS rejected'
+tv_reset; printf 'Verdict: FAIL\nVerdict: PASS\n' > "$TV_FILE"
+tv_refused 'tick-verdict: first Verdict wins over later PASS'
+tv_reset; printf 'Verdict: PASS | FAIL | HANDBACK\n' > "$TV_FILE"
+tv_refused 'tick-verdict: unfilled verdict template rejected'
+tv_reset; : > "$TV_FILE"
+printf 'Verdict: PASS\n' > "$TV_DIR/step-1-verify.md"
+tv_refused 'tick-verdict: empty canonical with legacy PASS rejected'
+tv_reset; printf 'Verdict: FAIL\n' > "$TV_DIR/step-1-verify.md"
+tv_refused 'tick-verdict: legacy FAIL rejected' "$TV_DIR/step-1-verify.md"
 
 echo "== L3. verify <slug>: plan.md structural checks + folded CONTEXT read =="
 # v6: a draft plan must carry ## Goal check + ## Decision log, so every structural
@@ -654,6 +740,35 @@ ps set vf-legacy implemented >/dev/null
 out="$(ps verify vf-legacy)"; rc=$?
 chk "verify (legacy implemented plan, no run sections) → exit 0" test "$rc" = "0"
 chk "..says the check was not required"                has "run sections not required" "$out"
+
+echo "== L3d. verify <slug>: traceability reports only for stored drafts =="
+vplan vf-untraced '# Traceability' 'Goal: Deliver the requested outcome' \
+  '## Implementation steps' \
+  '### 1. Untraced work' '- Goal: Optional polish' '- Inputs: example text (serves S1)' \
+  '- Done when: `true` exits 0' \
+  '### 2. Traced work' '- Goal: Deliver the outcome (serves S1, S2)' \
+  '- Done when: `true` exits 0' \
+  '### 3. Missing Goal' '- Inputs: example text (serves S1)' \
+  '- Done when: `true` exits 0' \
+  '## Verification' 'Goal: Outside the steps (serves S1)'
+ps init vf-untraced >/dev/null
+out="$(ps verify vf-untraced)"; rc=$?
+chk "untraced-draft: a missing trace remains informational → exit 0" test "$rc" = "0"
+chk "untraced-draft: names the step whose Goal lacks serves S" has '^CHECK: untraced step 1$' "$out"
+chk "untraced-draft: a Goal with scenario references is traced" hasnt '^CHECK: untraced step 2$' "$out"
+chk "untraced-draft: Inputs and later sections cannot trace a missing Goal" has '^CHECK: untraced step 3$' "$out"
+
+for trace_state in approved in_progress implemented failed superseded; do
+  ps set vf-untraced "$trace_state" >/dev/null
+  out="$(ps verify vf-untraced)"; rc=$?
+  chk "untraced-released: ${trace_state} → exit 0" test "$rc" = "0"
+  chk "untraced-released: ${trace_state} skips traceability" hasnt 'CHECK: untraced step' "$out"
+done
+# A released plan may have no sidecar at all: unknown must not mean draft.
+rm -f "$PLANS/vf-untraced/.state.json"
+out="$(ps verify vf-untraced)"; rc=$?
+chk "untraced-released: no stored state → exit 0" test "$rc" = "0"
+chk "untraced-released: no stored state skips traceability" hasnt 'CHECK: untraced step' "$out"
 
 out="$(ps verify)"; rc=$?
 chk "verify with no slug → exit 1"                  test "$rc" = "1"
@@ -1157,6 +1272,7 @@ chk "record-write is idempotent" test "$(cat "$HASH_STATE")" = "$hash_once"
 printf '\noutside edit\n' >> "$HASH_MD"
 chk "outside printf append → changed" test "$(psout drift hash-plan)" = changed
 chk "lib mentor_plan_drift → changed" test "$(mentor_plan_drift "$HASH_MD")" = changed
+saved_pass hash-plan 1
 out="$(ps tick hash-plan 1)"; rc=$?
 chk "tick after outside edit → exit 0" test "$rc" = 0
 chk "tick reports drift BEFORE its tick result" test "$(printf '%s\n' "$out" | head -1)" = "$NOTICE"
@@ -1191,6 +1307,7 @@ plan hash-cycle '# hookless' '## Implementation steps' '1. first' '2. second' '3
 ps init hash-cycle >/dev/null
 ps record-write hash-cycle >/dev/null
 for cycle in 1 2; do
+  saved_pass hash-cycle "$cycle"
   printf '| Step %s | PASS |\n' "$cycle" >> "$PLANS/hash-cycle/plan.md"
   ps record-write hash-cycle >/dev/null
   out="$(ps tick hash-cycle "$cycle")"; rc=$?

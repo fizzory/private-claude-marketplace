@@ -10,10 +10,10 @@ This file is host-neutral: it names no store paths and no host field names. Thos
 live in the adapters — point every host lookup at them:
 
 - Claude Code layout, id variable, resume chain, compaction marker, child linkage,
-  the jq filter → `adapters/claude/README.md` → **## Retrospective evidence**.
-- Codex layout and the same six facts → `adapters/codex/README.md` → **## Retrospective evidence**.
+  the jq filter → [claude/README.md](../../../../../adapters/claude/README.md) → **## Retrospective evidence**.
+- Codex layout and the same six facts → [codex/README.md](../../../../../adapters/codex/README.md) → **## Retrospective evidence**.
 - agt worker mapping (claude / codex / kiro / agy) and the opaque rule →
-  `adapters/delegate-stores.md`.
+  [delegate-stores.md](../../../../../adapters/delegate-stores.md).
 
 ## Source roots
 

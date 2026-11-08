@@ -1,7 +1,7 @@
-# Rationale — playbook-retrospective
+# Rationale — retrospective
 
-Narrative home for this playbook, per `plugins/mentor/README.md` → "Where a new rule
-goes". The imperative rules live in `SKILL.md` and the reference files; this file
+Narrative home for this playbook, per [the mentor README](../../../../../README.md) → "Where a new rule
+goes". The imperative rules live in [the retrospective playbook](../retrospective.md) and its reference files; this file
 records where they came from and why, read only when someone is about to change them.
 
 ## Lineage: Cursor's pstack `/reflect`
@@ -10,7 +10,7 @@ The retro adopts the idea behind Cursor's pstack plugin `/reflect`
 (https://github.com/cursor/plugins/tree/main/pstack, `skills/reflect`): three
 reviewers run over one session, a synthesizer sorts their findings into
 Accepted / Rejected / Backlog, and approved rows become skill edits or new skills. The
-three lens prompts and the synthesizer in `references/` are ported from pstack's
+three lens prompts and the synthesizer in this directory are ported from pstack's
 `skills/reflect/references/{judgment-reviewer,tooling-reviewer,divergent-reviewer,synthesizer}.md`.
 
 ## What was kept
@@ -35,7 +35,7 @@ three lens prompts and the synthesizer in `references/` are ported from pstack's
   transcript directly. After several compactions that transcript holds only the latest
   summary and the real work lives in delegate transcripts, so the lenses instead read
   `evidence/manifest.json` + the root digest, grep delegate digests on demand, and
-  re-open raw spans before citing truncated text. See `references/evidence-graph.md`.
+  re-open raw spans before citing truncated text. See [evidence-graph.md](evidence-graph.md).
 - **The repeatable bar for a new skill.** pstack treats a new skill as rare. Here a new
   skill is a normal output when a procedure was done 2+ times, the user said they will
   redo it, or an existing skill should have covered it (then prefer editing or tuning
@@ -82,16 +82,16 @@ well, never instead.
 
 ## Why a playbook, not a new workflow
 
-Shaping the retro as a `playbook-*` skill loaded by planning (like
-`playbook-software-change`) makes it inherit the edit gate, the one approval, the
+Shaping the retro as an indexed reference loaded by planning (like
+[software-change](../software-change.md)) makes it inherit the edit gate, the one approval, the
 decision log, the independent verifier, and the Done review with no new hooks, scripts,
-or state tokens — the charter in `plugins/mentor/README.md` → "What mentor is — and is
+or state tokens — the charter in [the mentor README](../../../../../README.md) → "What mentor is — and is
 not" forbids that machinery. The decision log behind these choices lived in the local,
 gitignored plan that built v6.1.0; this file is its durable record.
 
 ## Boundary with loom
 
-The NOT-for line in the description splits mentor retro from loom's batch harvesting:
+The NOT-for line in planning's description splits mentor retro from loom's batch harvesting:
 mentor retro covers **one** session, interactively, with one approval, on both hosts,
 and reads the plan and decision log. loom covers batches across sessions, uses a ledger,
 runs headless, and is Claude Code only. Mentor installs without loom.

@@ -6,7 +6,7 @@ marks the rest opaque. A delegate store is **never a hard dependency** — the
 playbook runs without any of them. When a detected delegate's store is absent or
 unreadable, that node goes under the manifest's `skipped` with the reason and
 coverage is `partial` (this matches
-`skills/playbook-retrospective/references/evidence-graph.md`); it never fails the run.
+[the evidence graph](../skills/planning/references/playbooks/retrospective/evidence-graph.md)); it never fails the run.
 
 ## The rule: detect → map → or mark opaque
 

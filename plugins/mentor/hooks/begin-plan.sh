@@ -118,9 +118,9 @@ if [ -n "$target_slug" ] && [ -d "${plans_dir}/${target_slug}" ]; then
   if [ -z "$target_owner" ] || [ "$target_owner" = "$wt_id" ]; then
     case "$(mentor_plan_state_stored "$target_dir"):$(mentor_plan_effective_state "$target_dir")" in
       approved:approved|approved:in_progress|in_progress:*)
-        msg="ALREADY APPROVED: ${target_slug} — not arming the gate; implement it per planning's After Proceed section. To re-plan instead: plan-state.sh set ${target_slug} draft, then re-run."
+        msg="ALREADY APPROVED: ${target_slug} — not arming the gate; follow skills/planning/SKILL.md → After Proceed. To re-plan instead: plan-state.sh set ${target_slug} draft, then re-run."
         [ "$(mentor_plan_effective_state "$target_dir")" = implemented ] &&
-          msg="${msg} — run in progress (all steps ticked): resume at After Proceed step 6 (Verification, Goal check, Done review, deliver)."
+          msg="${msg} — run in progress (all steps ticked): resume at After Proceed step 6."
         echo "$msg"
         [ -n "$context_warn" ] && echo "$context_warn"
         exit 0

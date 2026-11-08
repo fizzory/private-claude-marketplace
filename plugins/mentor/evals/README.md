@@ -1,18 +1,16 @@
-# Trigger evals — which mentor skill fires?
+# Routing and playbook-selection evals
 
 `hooks/tests/` proves the scripts behave. This proves the **descriptions** do: that a
-user's phrasing reaches the skill it should, and — more importantly — not one of its
-eight siblings.
+user's phrasing reaches the skill it should, and avoids its six siblings.
 
-mentor ships nine overlapping user-facing skills (`planning`, `playbook-software-change`,
-`playbook-retrospective`, `grilling`, `previewing`, `merging`, `shipping`,
-`constitution-authoring`, `frontend-self-ex-review`). The risk that matters is not "does
-`playbook-software-change`
-trigger" but "does it fire when the user meant `planning`" — a playbook is loaded *by*
-planning, so a direct hit on it is usually the wrong route — or "does `previewing` steal `frontend-self-ex-review`'s UI
-queries" (both look at screens; they differ on a review page against a self-explanatory
-verdict). A description tuned on its own can score perfectly and still collide, so this
-harness stages **all nine at once** and records which one wins.
+Mentor ships seven user-facing skills (`planning`, `grilling`, `previewing`, `merging`,
+`shipping`, `constitution-authoring`, `frontend-self-ex-review`). Planning reads
+five playbooks (software-change, retrospective, investigation, hillclimb and prototype) as references through
+[`skills/planning/references/playbooks.md`](../skills/planning/references/playbooks.md).
+Both forward planning and single-session retrospective requests must select `planning`;
+reference selection happens within that flow. Other collisions still matter, such as
+`previewing` stealing `frontend-self-ex-review`'s screen-review queries. The harness
+stages **all seven skills at once** and records which one wins. Selection cases additionally prove which reference files were read, in order, before work starts.
 
 Note the skill names are the **skill** names, not the command names: since v2.18.0 no
 skill shares a name with a command (`/mentor:plan` → skill `planning`, and so on), which
@@ -23,14 +21,43 @@ harness measures is measuring the real routing surface only because of that spli
 
 ```bash
 cd plugins/mentor/evals
-python3 harness.py claude claude-opus-5 2  # <host> <model> <reps-per-query>
+python3 harness.py claude "" 1  # <host> <model> <reps-per-query>; empty model uses host default
 python3 harness.py codex gpt-5.6-sol 2
 ```
 
-Needs the selected host CLI on PATH and its normal authentication. ~42 queries × reps run six
-at a time. The scratch projects and `results-<host>.json` files are written to
-`$TMPDIR/mentor-trigger-eval/` (override with `MENTOR_EVAL_WORKDIR`) — never into the repo.
-Keep Claude and Codex baselines separate because model routing behavior is not interchangeable.
+Needs the selected host CLI on PATH and its normal authentication. The 62 queries × reps run six
+at a time, each in a fresh, automatically seeded project. Exit 0 requires every case to pass;
+a wrong pick, missing/unexpected/out-of-order read, wrong delivery owner, contamination,
+process error, timeout or incomplete transcript exits nonzero. No flags were added.
+Scratch projects and evidence go under `$TMPDIR/mentor-trigger-eval/run-<host>-<id>/`
+(override the parent with `MENTOR_EVAL_WORKDIR`), never into the repo. Each case retains
+`transcript.jsonl`, `stderr.txt`, `reads.json`, `score.json` and its project. Both the run's
+`results.json` and the latest `results-<host>.json` retain scores, failures, init inventories,
+read paths and evidence locations. Keep host baselines separate.
+
+## Child-session isolation
+
+Every Claude child receives `--setting-sources project,local --strict-mcp-config`,
+`--disallowedTools "mcp__*"`, and child-local `CLAUDE_CODE_DISABLE_CLAUDE_MDS=1` plus
+`CLAUDE_CODE_DISABLE_AUTO_MEMORY=1`. The harness removes the nesting marker and inherited
+plugin-root pointers; it preserves the authenticated profile. It uses an appended system
+instruction for the selection boundary because CLAUDE.md and memory are disabled. It does
+not use `--bare`, an empty config directory, or caller-supplied isolation settings.
+
+The `system`/`init` guard fails closed on absent/malformed inventories, unexpected skills,
+agents or plugins, and any MCP server, reporting `incomplete (contaminated)` with what
+loaded. Its explicit name sets allow only the seven staged skills, 22 measured built-in
+skills, seven measured built-in agents and five managed plugins. Managed plugin records
+must also have `path: builtin` and their matching `@builtin` source. No prefix wildcard or
+runtime auto-allowlisting is used. The measured probe inventory is saved in
+[`fixtures/selection/claude-isolated-init.json`](fixtures/selection/claude-isolated-init.json);
+its one staged `demo` skill is **not** a built-in and is not allowlisted for eval children.
+A host update with new built-ins fails until a fresh measured inventory is reviewed.
+Non-staged Skill calls, including namespaced picks, retain their full name and fail the
+expected routing comparison instead of being reported as `none`.
+
+Codex uses ephemeral read-only sessions and observes completed literal file-read commands;
+it does not expose Claude's init inventory, so this guard is a Claude-host check.
 
 Baseline at v2.11.1: **36/40**, 18 of 20 queries clean on both reps — over 8 staged
 skills and queries 1–20. v2.12.0 stages 10 skills (`tour` and the topic × perspective
@@ -74,39 +101,70 @@ re-baseline on the first run.
 **v6.1.0** stages 9 skills (`playbook-retrospective` joined) and adds queries 77–82: four
 core/plain-wording triggers for a single-session retrospective (#77–80) and two near-misses
 — a batch harvest across all past sessions, which is loom's job and routes to `none` (#81),
-and a forward code-change goal, which stays `planning` (#82). Like `playbook-software-change`,
-the retro playbook is loaded *by* planning, so a direct hit on it from a retro ask is the
-intended route here (the user invokes the retrospective directly). Re-baseline on the first run.
+and a forward code-change goal, which stays `planning` (#82). Those released skill IDs
+are now compatibility aliases in the playbook index. The four retro cases (#77–80)
+now expect `planning`; neither playbook is staged as a public skill. The recorded
+baselines above predate the conversion and need a fresh run.
 
-## Seed the fixture first — this is not optional
+## Fixture and selection boundary
+
+The harness runs `seed.py` for **every** case and repetition. No manual seeding is needed.
+The seed supplies the existing billing/onboarding plans, review page and source subjects,
+so a missing fixture cannot masquerade as a weak description. Resume cases add their own
+released plan/sidecar and saved verdict, and scoring rejects any change to those files.
+
+The original 48 routing cases retain their descriptions and STOP-only bodies. Cases
+83–96 instead copy each real skill folder, including its bundled references, byte for
+byte into the fresh project. Their common scratch instruction stops at workflow selection
+before approval, draft scaffolding, implementation, delegation, grading or delivery.
+It never gives the expected selection. The final `EVAL_SELECTION` JSON reports a single
+`delivery_owner` and any `history_to_recheck`; actual reads are independently scored from
+completed tool events, never from that self-report or a mention in prose.
+
+The parser credits successful `Read` calls and standalone literal `cat`/`sed`/`head`/`tail`
+commands with successful results. For literal shell sequences with `cd`, `;` or `&&`,
+it requires the staged file's full contents in the returned output and tracks Claude's
+working directory across completed calls. An earlier proven read still counts when a
+later command fails; a failed read, path mention or unsupported shell expression does not.
+Index completion must precede each playbook read request;
+parallel index/playbook reads fail. Search results, failed or unfinished reads and partial
+stream arguments do not count. All expected read paths must occur and no other indexed
+playbook may load. Selection continues past the planning Skill event until a complete
+transcript and one selection-boundary report are observed.
+
+| Case | Expected skill | Expected index/playbooks | Delivery owner |
+|---|---|---|---|
+| 83 | planning | index → software-change | software-change |
+| 84 | planning | index only (original writing) | general |
+| 85 | planning | index → retrospective | retrospective |
+| 86 | planning | index → software-change; no retrospective | software-change |
+| 87 | planning | index → investigation | investigation |
+| 88 | none | none (ordinary how/why) | none |
+| 89 | planning | index → hillclimb | hillclimb or general, exactly one |
+| 90 | planning | index → software-change; no hillclimb | software-change |
+| 91 | planning | index → prototype; no software-change | prototype |
+| 92 | previewing | none (mock-up request) | none |
+| 93 | planning | index → hillclimb + software-change | software-change only |
+| 94 | planning | saved plan, index → software-change (released inline alias) | software-change |
+| 95 | planning | saved plan, index → retrospective (released next-line alias) | retrospective |
+| 96 | planning | saved plan/verdict, principles, index → software-change | software-change; no supported history re-check |
+
+The non-software hillclimb accepts either owner expressly permitted by its reference;
+it still requires one scalar owner. Case 96 checks the negative S12 boundary at resume
+triage: both prior claims have support, so neither is selected for re-check. It does not
+execute an approved run or grade the historical artifacts.
+
+Offline scoring regression checks (no model calls):
 
 ```bash
-python3 seed.py "$TMPDIR/mentor-trigger-eval/project-claude"
-python3 seed.py "$TMPDIR/mentor-trigger-eval/project-codex"
+python3 -m unittest discover -s plugins/mentor/evals -p test_harness.py
+bash plugins/mentor/tests/test-dual-host-contract.sh
+scripts/verify-plugin-edits mentor
 ```
 
-`harness.py` stages the skills but not the plans they talk about. Against an empty
-project, a query like *"comment on each scenario of the onboarding plan"* makes the model hunt for a
-file that isn't there and answer empty-handed. That scores as "did not trigger" and
-is **indistinguishable from a genuinely weak description**.
-
-This is not hypothetical: the first run of this eval reported 32/40, and six of those
-eight failures were the missing fixture, not the skills. Seeding cleared all six. The
-tell is timing and wording: real triggers land in 7–25s, while a fixture-starved miss
-either runs slow (35–150s) as the model hunts for the file, or comes back fast (13–25s)
-saying there's no such plan or area. Either way, suspect the fixture before the
-description.
-
-`seed.py` lays down a superseded parent, three split children with isolation headers and
-state sidecars, an implemented standalone plan, an approved `user-onboarding` plan
-(query 59), and one review page at `.mentor/reviews/billing-invoice/review.html`, so
-query 32's refresh finds a prior page. It also lays down a work queue in the
-billing-invoice plan's context and four subject stubs — payment, ingestion, auth,
-checkout — for queries 22–24 and 44, which name an area with no plan.
-
-The v4.0.0 fixture added a tour page, the queue line, the stubs and the onboarding
-plan; results from older fixtures are not comparable on ids 22–24, 44 and 59. v5.0.0
-dropped the handoff note and the tour page along with the skills that read them.
+Synthetic passing transcripts exercise the scorer, not the skills' live behavior. Only
+the literal live command `python3 plugins/mentor/evals/harness.py claude "" 1` proves the
+selection predicate; the offline tests cannot substitute for it.
 
 ## The eval set
 
@@ -143,7 +201,7 @@ which skill fires — no question on a reversible fork, a pause on an always-pau
 decision-log row per choice, a verifier before every tick, a mid-run product call decided without pausing, and
 a non-code goal picking no playbook. Cases 1–6 each seed a scratch repo with an approved
 plan; cases 7–17 set up the state their prompt names. Each is
-graded by a reader against its assertions; `harness.py` does not run it.
+graded by a reader against its assertions; `harness.py` does not run cases 1–17. Cases 18–31 mirror routing/selection cases 83–96 through `routing_case_id` and are executed by the harness. Their pre-approval scope is the selection boundary described above; full-run behaviour remains reader-graded.
 
 v6.1.0 adds cases 7–15 for the retrospective playbook (scenarios S1–S8; S5 is two cases,
 #11 and #12): a plain repeated

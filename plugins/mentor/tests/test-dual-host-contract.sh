@@ -94,7 +94,15 @@ assert "git status --porcelain --untracked-files=all" in goal_check
 assert software.index('Skill(skill="mentor:shipping")') < software.index('Skill(skill="mentor:merging")')
 assert "per-check evidence bundle in every verdict" in software
 retro = overlays[1].read_text()
-assert "Local edits only, then the Done review" in retro
+assert "open, confirmed PR/MR whose body" in retro
+assert "plan-state.sh begin-run <slug>" in retro
+assert "Never merge, enable auto-merge" in retro
+assert "PR review replaces plan approval" in retro
+assert "kept local" in retro
+assert "retro-pr-body-check.sh" in retro
+assert "without plan approval" in workflows["planning"]["fallback"] or "skip plan approval" in workflows["planning"]["fallback"]
+assert "Claude-only continuation" in workflows["planning"]["fallback"]
+assert "Codex follows the run in-thread" in workflows["planning"]["fallback"]
 assert "Editing-only rationale" in retro
 assert "never co-loaded" in retro
 
@@ -108,11 +116,11 @@ prototype = (playbooks / "prototype.md").read_text()
 for declaration in ("goal is the prototype itself", "mid-plan fork", "previewing", "Name the decision", "observed comparison evidence", "Never ship prototype code"):
     assert declaration in prototype, declaration
 
-resources = ("evidence-graph", "lens-judgment", "lens-tooling", "lens-divergent", "synthesizer", "rationale")
+resources = ("evidence-graph", "lens-judgment", "lens-tooling", "lens-divergent", "synthesizer", "rationale", "pr-body")
 for name in resources:
     resource = playbooks / "retrospective" / f"{name}.md"
     assert resource.is_file(), resource
-    if name not in ("evidence-graph", "rationale"):
+    if name not in ("evidence-graph", "rationale", "pr-body"):
         assert "Open this brief with the plan-level Goal: line verbatim" in resource.read_text(), resource
     if name != "rationale":
         assert f"retrospective/{name}.md" in retro, name

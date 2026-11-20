@@ -71,6 +71,11 @@ A change that contradicts it amends this section first.
    using native host primitives (hooks, subagents), not a hand-rolled state
    machine. A dead end is reported, not spun on.
 
+**Retrospective exception.** A requested retrospective skips plan approval, runs end to
+end, and delivers one PR/MR per repository touched, with unavailable delivery kept
+local and reported. The human's single review is the PR/MR; only a human merges it.
+Rules 1 (done is a check), 3 (decision log), and 5 (independent grader) apply unchanged.
+
 ## Release safety
 
 - Use semantic versioning from the canonical manifest. A breaking state or

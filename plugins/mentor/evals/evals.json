@@ -323,8 +323,8 @@
     {
       "id": 85,
       "expected": "planning",
-      "tests": "retrospective positive: one finished session delivers local lessons, incidental skill edits do not select software-change",
-      "query": "Plan a retrospective of this finished agent session and turn its repeated manual steps into local reusable skills; report the remaining proposals.",
+      "tests": "retrospective positive: one finished session delivers skill-change PRs for human review without plan approval, incidental edits do not select software-change",
+      "query": "Plan a retrospective of this finished agent session and turn its repeated manual steps into reusable skills delivered through one PR/MR per repo; report kept-local changes and remaining proposals.",
       "expected_reads": [
         "planning/references/playbooks.md",
         "planning/references/playbooks/retrospective.md"

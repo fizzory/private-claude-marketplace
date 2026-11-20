@@ -48,6 +48,7 @@ PINNED_CLIS="$(printf '%s\n' \
   "approve-plan.sh" \
   "begin-plan.sh" \
   "plan-state.sh" \
+  "retro-pr-body-check.sh" \
   | sort)"
 
 echo "== A. hooks.json registers exactly the six pinned hooks =="

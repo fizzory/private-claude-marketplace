@@ -24,6 +24,10 @@
 #   start <slug> [any init flag]
 #       ensure-dir + init in ONE call; prints only the plan.md path on stdout.
 #
+#   begin-run <slug>
+#       Write this session’s continuation marker for exactly this plan; no approval,
+#       gate or sidecar mutation. Without a Claude session id, keep prose continuation.
+#
 #   set <slug> <state> [--note "…"]
 #       Upsert (create-then-set): most plans predate the sidecar. <state> is one of
 #       draft approved in_progress implemented failed superseded.
@@ -147,7 +151,8 @@
 # no plans dir, no jq, nothing to report → empty stdout, ONE reason line on stderr,
 # exit 0. Silent-empty would be indistinguishable from "no plans" and the calling
 # skill would improvise a listing. Exceptions: drift prints unknown without a
-# registry; record-write needs an existing plan and exits 1 without a repo/registry.
+# registry; record-write and begin-run require an existing plan and exit 1 without
+# a repo/registry.
 
 set -euo pipefail
 
@@ -207,6 +212,7 @@ Usage: plan-state.sh <subcommand>
   start <slug> [any init flag]          ensure-dir + init in ONE call; echoes the plan.md
                                          path. The plan-write path — replaces the two-call
                                          sequence and its re-derive footguns
+  begin-run <slug>                      start native continuation for this explicit plan
   set <slug> <state> [--note "…"]       state: draft|approved|in_progress|implemented|failed|superseded
   set-deps <slug> a,b                   replace deps wholesale (cycle-checked, fail-soft)
   tick <slug> <N>                       append ✅ to step N in plan.md (idempotent, fails loud)
@@ -661,7 +667,7 @@ fi
 # gate, sweep, start) exits before reaching here, so none of them appears in this
 # allow-list — adding one would be unreachable code, not a fix.
 case "$sub" in
-  init|set|set-deps|tick|record-write|drift|verify|query|list|current) ;;
+  init|set|set-deps|tick|record-write|drift|verify|query|list|current|begin-run) ;;
   claim|brief|policy|set-parent|set-priority|set-category|handoff-path|handoff-selfcheck)
     echo "plan-state.sh: '${sub}' was removed in mentor v5.0.0 — no replacement" >&2
     exit 1
@@ -683,14 +689,14 @@ repo_root="$(mentor_repo_root "$(pwd)")"
 if [ -z "$repo_root" ]; then
   [ "$sub" != drift ] || { echo unknown; exit 0; }
   echo "[mentor plan-state] Not in a git repo — mentor keeps no plan registry here." >&2
-  [ "$sub" != record-write ] || exit 1
+  case "$sub" in record-write|begin-run) exit 1 ;; esac
   exit 0
 fi
 plans_dir="$(mentor_plans_dir "$repo_root")"
 if [ ! -d "$plans_dir" ]; then
   [ "$sub" != drift ] || { echo unknown; exit 0; }
   echo "[mentor plan-state] No plans dir yet (${plans_dir}) — nothing planned in this repo." >&2
-  [ "$sub" != record-write ] || exit 1
+  case "$sub" in record-write|begin-run) exit 1 ;; esac
   exit 0
 fi
 
@@ -1018,6 +1024,24 @@ def csv: split(",") | map(select(length > 0));
 '
 
 case "$sub" in
+
+  begin-run)
+    if [ "$#" -ne 1 ]; then
+      echo "[mentor plan-state] begin-run requires exactly one <slug>." >&2
+      exit 1
+    fi
+    slug="$1"
+    case "$slug" in
+      ""|.|..|*/*|*[!a-zA-Z0-9._-]*)
+        echo "[mentor plan-state] begin-run: invalid slug." >&2; exit 1 ;;
+    esac
+    require_slug "$slug"
+    if [ ! -f "${plans_dir}/${slug}/plan.md" ]; then
+      echo "[mentor plan-state] begin-run: plan.md is missing for ${slug}." >&2
+      exit 1
+    fi
+    mentor_begin_run "$repo_root" "$slug"
+    ;;
 
   init)
     parse_init_args init "$@"

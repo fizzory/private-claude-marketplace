@@ -441,23 +441,12 @@ EOF
   exit 0
 fi
 
-# v6.0.0 — the run marker. Proceed (no flag) starts an autonomous run: write
-# .mentor/.run-<session_id> (slug= + started=) so plan-continue.sh, the Stop hook, keeps
-# the session going while the plan's stored state is in_progress. --deliver exited
-# above, so it never writes one. No session id (not under Claude Code) → no marker:
-# the run loop is then the skill's prose rule alone. Pruned after 1440 minutes, the
-# same pattern context-checkpoint.sh uses for its own markers.
+# Proceed starts native continuation for the same explicit plan; --deliver exited
+# above. The writer is shared with retros, which do not approve or promote drafts.
 run_slug=""
 [ -n "${newest_plan:-}" ] && run_slug="$(basename "$(dirname "$newest_plan")")"
-if [ "$this_session" != "nosession" ] && [ -n "$run_slug" ]; then
-  run_state_dir="$(mentor_state_dir "$repo_root")"
-  if [ -n "$run_state_dir" ]; then
-    mkdir -p -m 700 "$run_state_dir" 2>/dev/null || true
-    find "$run_state_dir" -maxdepth 1 -name '.run-*' -mmin +1440 -delete 2>/dev/null || true
-    printf 'slug=%s\nstarted=%s\n' "$run_slug" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      > "${run_state_dir}/.run-${this_session}" 2>/dev/null || true
-    echo "  run: marker written — the Stop hook keeps this session going while ${run_slug} is in_progress"
-  fi
+if [ -n "$run_slug" ]; then
+  bash "${hook_dir}/plan-state.sh" begin-run "$run_slug" || true
 fi
 
 # Point to the single full directive as the model resumes after the Bash call.

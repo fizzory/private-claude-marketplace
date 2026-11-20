@@ -67,7 +67,7 @@
       "prompt": "Retro on the session fixture plugins/mentor/evals/fixtures/retro/s1-repeat/ — a plain session where the user ran the same three steps twice (make openapi → npm run gen:client → npm test -- client). Graded against plugins/mentor/evals/fixtures/retro/s1-repeat/expected.md.",
       "assertions": [
         "Exactly one Accepted new-skill row for the repeated three-step procedure, with its destination (`.claude/skills/<name>` + a relative `.codex/skills/<name>` symlink)",
-        "The Accepted row matches s1-repeat/expected.md; after the one approval the skill exists and passes quick_validate.py"
+        "The Accepted row matches s1-repeat/expected.md; without plan approval the skill exists and passes quick_validate.py; a confirmed PR/MR has a checked body for human review and merge, or unavailable delivery is reported as kept local"
       ]
     },
     {
@@ -128,11 +128,11 @@
     {
       "id": 14,
       "name": "S7-retro-refused-during-live-run",
-      "prompt": "User runs /mentor:retro while this session's run marker points at an in_progress plan.",
+      "prompt": "User runs /mentor:retro while this session's run marker points at an in_progress plan that is not a retrospective of the requested session.",
       "assertions": [
         "The command refuses and says a plan run is in progress or paused and must finish first",
-        "A paused run (stored state `approved` with a run marker) also refuses, not only in_progress",
-        "No second plan gate is armed (begin-plan.sh is not reached)"
+        "A paused run of that other plan (stored state `approved` with a run marker) also refuses, not only in_progress.",
+        "The live run is left untouched: no `plan-state.sh set` or `begin-run` runs for a retro plan, and the run marker still names the original plan."
       ]
     },
     {
@@ -194,7 +194,7 @@
       "id": 20,
       "name": "playbook-selection-85",
       "routing_case_id": 85,
-      "prompt": "Plan a retrospective of this finished agent session and turn its repeated manual steps into local reusable skills; report the remaining proposals.",
+      "prompt": "Plan a retrospective of this finished agent session and turn its repeated manual steps into reusable skills delivered through one PR/MR per repo; report kept-local changes and remaining proposals.",
       "assertions": [
         "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/retrospective.md.",
         "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",

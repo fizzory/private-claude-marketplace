@@ -1,7 +1,7 @@
 {
   "name": "mentor",
-  "description": "Plan-first agent workflow: approve a plan once, then mentor runs it to a verified done-check, pausing only for always-pause actions and logging every decision for review.",
-  "version": "6.4.1",
+  "description": "Plan-first agent workflow: approve a plan once, then mentor runs it to a verified done-check, pausing only for always-pause actions and logging every decision for review. Requested retros run without plan approval and open one PR/MR per repo for human review and merge.",
+  "version": "6.5.0",
   "author": {
     "name": "NTBX"
   },
@@ -9,7 +9,7 @@
   "interface": {
     "displayName": "Mentor",
     "shortDescription": "Approve once; agents run the plan to a verified done.",
-    "longDescription": "Plan any goal, settle questions by evidence or decision-maker agents, approve once, then run every step to an independently verified PASS with a decision log and a Done review. Software changes add a runtime playbook for tests, PRs, and merging.",
+    "longDescription": "Plan any goal, settle questions by evidence or decision-maker agents, approve once, then run every step to an independently verified PASS with a decision log and a Done review. Software changes add a runtime playbook for tests, PRs, and merging. Requested retros skip plan approval, deliver one PR/MR per repository, and leave merging to a human.",
     "developerName": "NTBX",
     "category": "Developer Tools",
     "capabilities": [

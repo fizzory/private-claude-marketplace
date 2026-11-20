@@ -13,6 +13,33 @@ that lands you at Step 4 never fires, so the ship tail's two `AskUserQuestion` g
 skipped and the push happens without the user ever choosing to test or choosing where the
 branch goes. Keep the call in-thread and this step keeps its checks.
 
+## Step 5A — GitLab review bodies
+
+Git push options cannot contain newline characters. Reading a Markdown file into
+`merge_request.description` therefore fails even for an ordinary multiline Done
+review; trimming its length cannot fix that transport constraint. `glab mr create`
+accepts the complete description as one quoted argument after a normal branch push.
+Shipping without `glab` can still open a title-only MR and name the saved local body
+for the user to attach. A retrospective requires its body to make the changes
+reviewable, so its caller checks for `glab` before pushing and otherwise keeps the
+repository's changes local.
+
+## Review transport failures
+
+The transport can run in a shell without `errexit`. On either GitHub or GitLab,
+an unchecked rejected push can fall through to creating or viewing a review
+against older remote commits. Explicit push status checks stop that path and
+return the caller's `not opened` result with repository, branch and reason,
+including for GitLab's title-only push options.
+
+An existing authorized GitLab MR needs only the guarded push and its queried URL;
+calling `glab mr create` again fails because the MR already exists. Run the create
+block only when the rerun query found no review, and explicitly stop on a genuine
+GitLab create failure. GitHub's create command remains unguarded so its
+already-exists response can fall through to querying and reusing the branch's PR
+after a successful push. Command-double tests run without `-e` so the harness
+cannot supply the missing failure handling.
+
 ## Step 7 — why the test command is saved after the push
 
 This lands in Step 7 and not in Step 4 on purpose. `.mentor/config.json` is

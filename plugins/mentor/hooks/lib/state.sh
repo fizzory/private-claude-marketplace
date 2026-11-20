@@ -60,6 +60,24 @@ mentor_state_dir() {
   return 0
 }
 
+# mentor_begin_run <repo_root> <slug> — shared native continuation marker writer.
+# The CLI validates its explicit slug; approval invokes that same CLI after promotion.
+# No lifecycle-state or gate writes here. No Claude session means prose-only continuation.
+mentor_begin_run() {
+  local repo_root="${1:-}" slug="${2:-}" session="${CLAUDE_CODE_SESSION_ID:-nosession}" run_state_dir
+  [ "$session" != nosession ] && [ -n "$session" ] && [ -n "$slug" ] || return 0
+  case "$session" in */*|.|..) echo "[mentor begin-run] Invalid session id — no marker written." >&2; return 0 ;; esac
+  run_state_dir="$(mentor_state_dir "$repo_root")"
+  [ -n "$run_state_dir" ] || return 0
+  mkdir -p -m 700 "$run_state_dir" 2>/dev/null || return 0
+  find "$run_state_dir" -maxdepth 1 -name '.run-*' -mmin +1440 -delete 2>/dev/null || true
+  if printf 'slug=%s\nstarted=%s\n' "$slug" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      > "${run_state_dir}/.run-${session}" 2>/dev/null; then
+    echo "  run: marker written — the Stop hook keeps this session going while ${slug} is in_progress"
+  fi
+  return 0
+}
+
 # mentor_no_repo_state_dir — echo the host-neutral fallback for sessions outside a
 # git repository. MENTOR_STATE_HOME is the explicit cross-host override. XDG state is
 # the portable default, while CLAUDE_CONFIG_DIR remains a supported Claude adapter

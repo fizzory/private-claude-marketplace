@@ -1,6 +1,6 @@
 {
   "eval_name": "mentor-v6.0.0-run-behaviour",
-  "note": "Behaviour checks for a mentor plan run (AGENTS.md → Mentor core concept). Cases 1–6 each seed a small approved plan in a scratch repo, approve it with Proceed, and grade the transcript and plan.md. Cases 7–15 are retrospective cases that run a retrospective on the fixtures under evals/fixtures/retro/ (each fixture copied to a scratch dir with __FIXTURE__ replaced by the copy's absolute path). Cases 16–17 cover the planning approval turn and the show plan escape hatch (16), and the run-end verdict report (17). Cases 1–17 are graded by a reader against the assertions, not executed by harness.py. Cases 18–31 mirror evals.json 83–96 and are executed by harness.py through their routing_case_id; cases 1–17 remain reader-graded, not executed by that harness.",
+  "note": "Behaviour checks for a mentor plan run (AGENTS.md → Mentor core concept). Cases 1–6 each seed a small approved plan in a scratch repo, approve it with Proceed, and grade the transcript and plan.md. Cases 7–15 are retrospective cases that run a retrospective on the fixtures under evals/fixtures/retro/ (each fixture copied to a scratch dir with __FIXTURE__ replaced by the copy's absolute path). Cases 16–17 cover the planning approval turn and the show plan escape hatch (16), and the run-end verdict report (17). Cases 1–17 are graded by a reader against the assertions, not executed by harness.py. Cases 18–31 mirror evals.json 83–96 and are executed by harness.py through their routing_case_id; cases 1–17 remain reader-graded, not executed by that harness. Case 32 checks retro delivery without a second confirmation and is reader-graded.",
   "evals": [
     {
       "id": 1,
@@ -67,7 +67,7 @@
       "prompt": "Retro on the session fixture plugins/mentor/evals/fixtures/retro/s1-repeat/ — a plain session where the user ran the same three steps twice (make openapi → npm run gen:client → npm test -- client). Graded against plugins/mentor/evals/fixtures/retro/s1-repeat/expected.md.",
       "assertions": [
         "Exactly one Accepted new-skill row for the repeated three-step procedure, with its destination (`.claude/skills/<name>` + a relative `.codex/skills/<name>` symlink)",
-        "The Accepted row matches s1-repeat/expected.md; after the one approval the skill exists and passes quick_validate.py"
+        "The Accepted row matches s1-repeat/expected.md; without plan approval the skill exists and passes quick_validate.py; a confirmed PR/MR has a checked body for human review and merge, or unavailable delivery is reported as kept local"
       ]
     },
     {
@@ -128,11 +128,11 @@
     {
       "id": 14,
       "name": "S7-retro-refused-during-live-run",
-      "prompt": "User runs /mentor:retro while this session's run marker points at an in_progress plan.",
+      "prompt": "User runs /mentor:retro while this session's run marker points at an in_progress plan that is not a retrospective of the requested session.",
       "assertions": [
         "The command refuses and says a plan run is in progress or paused and must finish first",
-        "A paused run (stored state `approved` with a run marker) also refuses, not only in_progress",
-        "No second plan gate is armed (begin-plan.sh is not reached)"
+        "A paused run of that other plan (stored state `approved` with a run marker) also refuses, not only in_progress.",
+        "The live run is left untouched: no `plan-state.sh set` or `begin-run` runs for a retro plan, and the run marker still names the original plan."
       ]
     },
     {
@@ -194,7 +194,7 @@
       "id": 20,
       "name": "playbook-selection-85",
       "routing_case_id": 85,
-      "prompt": "Plan a retrospective of this finished agent session and turn its repeated manual steps into local reusable skills; report the remaining proposals.",
+      "prompt": "Plan a retrospective of this finished agent session and turn its repeated manual steps into reusable skills delivered through one PR/MR per repo; report kept-local changes and remaining proposals.",
       "assertions": [
         "Select planning; completed reads include exactly the expected index/playbook paths: planning/references/playbooks.md, planning/references/playbooks/retrospective.md.",
         "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
@@ -323,6 +323,15 @@
         "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
         "Record exactly one delivery owner from 'software-change'; stop at selection before approval, implementation or delegation.",
         "Read the saved plan, principles and verdict; history_to_recheck is empty because the historical tick and saved verdict support both prior claims. Leave the saved history unchanged."
+      ]
+    },
+    {
+      "id": 32,
+      "name": "retro-delivery-opens-pr-without-asking",
+      "prompt": "A requested retrospective reaches delivery with its isolated changes committed on retro/<slug>, a passing retro-pr-body-check.sh result, an authenticated remote available for pushing and PR/MR creation, and no destination-constitution block. The host normally asks before pushing.",
+      "assertions": [
+        "The retro request supplies authorization to push retro/<slug> and open the PR/MR immediately; no question, confirmation button or offer precedes either action",
+        "The turn ends with the confirmed PR/MR URL and never a 'want me to open it?' question or a request for go-ahead"
       ]
     }
   ]

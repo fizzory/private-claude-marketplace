@@ -2,7 +2,7 @@
 name: planning
 description: >
   Plan and run goals with one approval, a durable .mentor/ plan and independent
-  checks. Use for requests to create a plan (including design or scope before work),
+  checks. Use to create a plan (including design or scope before work),
   run a goal end to end, or continue executing an identified approved .mentor/ plan.
   Also use for retrospectives of the current or one named finished agent session:
   "retro", "retrospective", "reflect on this session", "lessons learned",
@@ -10,7 +10,7 @@ description: >
   "turn what I keep doing into a skill", "lessons from today's session",
   "look back over what we did", or "worth saving as a reusable skill or a tweak to an
   existing one". Rebuilds from disk even for empty, short or compacted threads,
-  applies local skill changes and reports proposals.
+  opens PRs/MRs for skill changes without plan approval; reports proposals.
   NOT for batch harvesting across sessions (loom), progress/status recall or handoff
   notes, routine plan-document edits, direct edits/refactors without a plan or
   end-to-end request, ordinary how/why questions, standalone shipping/merging,
@@ -40,6 +40,15 @@ diagram-design, the `diagram_renderer` key in `.mentor/config.json`), all
 inside the gate-exempt `.mentor/` tree. Do not run
 repo-mutating shell commands during planning either; Bash is not enforced,
 but the rule is the same.
+
+**Retrospective exception (all approval and run rules below):** for a requested
+retrospective, follow [the retrospective playbook](references/playbooks/retrospective.md)
+→ **Planning entry** instead of arming or approving a plan gate, asking pre-run
+questions, or using the generic ship/merge tail. Keep the plan, decision log,
+independent checks and Done review; PR review is the human gate, so the retro runs
+through confirmed PR/MR delivery without an approval stop or a go-ahead question
+(playbook → **3. Extra always-pause items (the run)**). This exception applies
+on natural-language entry and resume too; never clear an existing live edit gate.
 
 ## Step 0 — Gate & constitution {#gate}
 
@@ -115,11 +124,12 @@ only re-ask a question the user already answered. Two checks first: a `note` say
 was **not individually reviewed** (a plan swept in by a release) means nobody approved
 it on its own — confirm with the user before building it; a `note` starting `paused:`
 means the run stopped on that decision-log row — ask its question first, write the
-`resumed` row, then continue. A resumed run has no run marker (only `approve-plan.sh`
-writes one, for the session that approved), so the Stop hook does not hold this
-session: keep working until a terminal state per **Hosts without a Stop hook or
-subagents**. To re-plan instead, run `plan-state.sh set <slug> draft`, then plan it
-again (`/mentor:plan <slug>` in Claude Code).
+`resumed` row, then continue. A resumed run has no run marker unless
+`plan-state.sh begin-run <slug>` runs for this session (Proceed runs it through
+`approve-plan.sh`; a retrospective resume runs it per its playbook), so an ordinary
+resume is not held by the Stop hook: keep working until a terminal state per
+**Hosts without a Stop hook or subagents**. To re-plan instead, run
+`plan-state.sh set <slug> draft`, then plan it again (`/mentor:plan <slug>` in Claude Code).
 
 On resume, load `references/principles.md` once per context (re-read after compaction)
 and revisit only the relevant entry when re-checking inherited claims backed by
@@ -1002,7 +1012,8 @@ For every terminal report (`PASS`, `paused`, or `failed`), send one verdict line
 ```
 
 When `<m>` > 0, name each leftover on one short line under the verdict line; when 0,
-add nothing.
+add no leftover lines. A playbook's Deliver mode may add its confirmed review URLs,
+one per line, under them.
 
 Take the step counts from the last `plan-state.sh tick` output (it prints `N/M`); only
 when no tick output is at hand, run `plan-state.sh query --slug <slug> --format tsv --fields

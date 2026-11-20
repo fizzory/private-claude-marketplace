@@ -83,15 +83,42 @@ well, never instead.
 ## Why a playbook, not a new workflow
 
 Shaping the retro as an indexed reference loaded by planning (like
-[software-change](../software-change.md)) makes it inherit the edit gate, the one approval, the
-decision log, the independent verifier, and the Done review with no new hooks, scripts,
-or state tokens — the charter in [the mentor README](../../../../../README.md) → "What mentor is — and is
-not" forbids that machinery. The decision log behind these choices lived in the local,
-gitignored plan that built v6.1.0; this file is its durable record.
+[software-change](../software-change.md)) retains the durable plan, decision log,
+independent verifier and Done review. The v6.5.0 exception changes the human gate:
+requesting a retro authorizes it to run end to end, with one PR/MR per repository
+for review and a human-only merge. Plan approval would duplicate that review and
+interrupt the requested flow. The old local-only delivery rule had no stated reason;
+it left the human to assemble and open the review after the agent had done the work.
+
+Host defaults may ask before committing or pushing even when delivery is part of
+the task. The retro request is standing authorization for its own commits, the
+`retro/<slug>` push and PR/MR creation; the human gate is PR review, so a second
+confirmation adds noise.
+
+The retro never calls `approve-plan.sh`: it is not slug-targeted and can promote
+unrelated drafts. A validated draft moves directly to the existing `in_progress`
+state; the shared `begin-run <slug>` marker writer retains Claude's native Stop-hook
+continuation without recording fictional human approval or introducing another state
+machine. Existing own/legacy edit gates and other active or paused runs still win.
+
+Baselines before edits and a separate worktree when necessary keep unrelated dirty
+content and commits out of the PR. A baseline-dirty file cannot be separated safely
+and stays local for a review call. Repository grouping gives each change its actual
+review home; unavailable tooling or remotes produce explicit local results without
+blocking the other repositories. The small body checker makes redaction and the
+visible review contract falsifiable, while shared PR transport avoids importing
+shipping's simplify, test-selection and software merge assumptions.
+
+The collapsed block has one exact wrapper so attributes such as `open` and visible
+summary text cannot hide internal terms from the body checker. Fences are rejected
+everywhere because fenced HTML is literal visible copy rather than a collapsed
+element. Sibling links rewrite the saved body after creation, so those rewrites
+must pass the same check before any remote edit; validating after upload would
+already have exposed the unchecked body.
 
 ## Boundary with loom
 
 The NOT-for line in planning's description splits mentor retro from loom's batch harvesting:
-mentor retro covers **one** session, interactively, with one approval, on both hosts,
+mentor retro covers **one** requested session end to end, with PR review, on both hosts,
 and reads the plan and decision log. loom covers batches across sessions, uses a ledger,
 runs headless, and is Claude Code only. Mentor installs without loom.

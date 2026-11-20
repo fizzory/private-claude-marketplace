@@ -367,73 +367,29 @@ test question.)
 
 ### 5A — Push + open PR/MR
 
-Detect the host from `git remote get-url origin`:
+Resolve the explicit repository root, branch, base, title and body-file inputs, then
+follow [references/open-pr.md](references/open-pr.md).
+Re-derive root/branch/base in each shell call as Steps 2–3 do: use `origin/HEAD`, falling
+back to the current branch when unset.
+For a single-commit GitLab MR, use the commit subject; otherwise use the branch as
+title, because a multi-commit branch's latest subject is often Step 3's `chore(simplify)` commit.
+For standalone GitHub, pass an empty title/body-file to retain `--fill`; under a plan
+run, prepare the body below first.
 
-- **GitLab** (URL contains `gitlab` or your self-hosted GitLab host) — fold MR
-  creation into the push (idempotent — an existing open MR is reused):
-  ```bash
-  # Re-derive: separate Bash call, so Step 1/2's vars are gone. Pushing with an empty
-  # $branch or $base targets the wrong ref — re-derive before every push, without exception.
-  repo_root="$(git rev-parse --show-toplevel)"
-  branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD)"
-  base="$(git -C "$repo_root" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')"
-  # Same fallback Steps 2/3 carry. Without it an unset origin/HEAD (any remote added with
-  # `git remote add` rather than cloned) pushes -o merge_request.target="" — which fails
-  # AFTER the push has already landed.
-  [ -n "$base" ] || base="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD)"
-
-  # Title mirrors the GitHub path's `--fill`: the commit subject only when the branch is a
-  # single commit. Unconditional `log -1` would title multi-commit MRs with Step 3's
-  # auto-created `chore(simplify)` commit — worse than the slug. Fail-soft: a missing
-  # origin/$base makes rev-list error, the count is empty, and title stays "$branch".
-  title="$branch"
-  [ "$(git -C "$repo_root" rev-list --count "origin/${base}..HEAD" 2>/dev/null)" = "1" ] &&
-    title="$(git -C "$repo_root" log -1 --format=%s)"
-
-  git -C "$repo_root" push -u origin "$branch" \
-    -o merge_request.create \
-    -o merge_request.target="$base" \
-    -o merge_request.remove_source_branch \
-    -o merge_request.title="$title" 2>&1 | tee /tmp/ship-push.out
-  ```
-  Surface the MR URL (grep for `/-/merge_requests/`) together with the target
-  it named (`$base`) — the one piece of "did this land where I meant?" nothing
-  else in this block confirms. If a `WARNINGS:` block names `merge_request.target`,
-  the target is invalid — the MR did NOT open; re-resolve the base (ask the user;
-  plan run: re-resolve from `origin/HEAD` without asking and log a row) and retry. An already-open-MR warning is fine **when the MR is this branch's
-  own work** — print its URL and its target, since this path reused an existing
-  MR whose target these push options never touched. (An MR opened by someone
-  else is the Step 1 ownership case; if Step 1 was skipped — no `gh` on a
-  GitLab remote — check the MR author/title before shrugging it off.)
-
-- **GitHub** — push, then open the PR with `gh` (run inside the repo):
-  ```bash
-  # Re-derive (separate Bash call again — see 5A's GitLab block).
-  repo_root="$(git rev-parse --show-toplevel)"
-  branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD)"
-  base="$(git -C "$repo_root" symbolic-ref --short refs/remotes/origin/HEAD 2>/dev/null | sed 's#^origin/##')"
-  [ -n "$base" ] || base="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD)"   # see the GitLab block
-  git -C "$repo_root" push -u origin "$branch"
-  (cd "$repo_root" && gh pr create --base "$base" --head "$branch" --fill)
-  ```
-  If `gh` is absent, print the compare URL instead.
-
-- **Other host** — push, then print the compare URL for manual PR creation.
-
-**PR body under a plan run.** Write the body to a temp file first: the plan's
+**PR body under a plan run.** Retrospectives use
+[their own template](../planning/references/playbooks/retrospective/pr-body.md) instead. Write the body to a temp file first: the plan's
 `## Done review` (per scenario: expected, observed, evidence; the runbook or
 `Runbook: n/a, merge is self-contained`; leftovers), then the decision log grouped by use
 case with `review?: needed` rows first. Evidence cited `local: .mentor/…` stays a local
-path — say in the body that it is not uploaded. On GitHub use
-`gh pr create --base "$base" --head "$branch" --title "<plan title>" --body-file "$body"`
-instead of `--fill`; on GitLab add `-o merge_request.description="$(cat "$body")"` to the
-push. A body too long for a push option is trimmed to the Done review and a pointer to
-`.mentor/plans/<slug>/plan.md`.
+path — say in the body that it is not uploaded. Pass the plan title as `title` and
+this file as `body_file`; on GitLab without `glab` the transport opens a title-only MR
+and names this file for the user to attach (see
+[rationale](references/rationale.md) → **Step 5A — GitLab review bodies**).
 
 ### 5B — Push to upstream
 
 ```bash
-# Re-derive (separate Bash call again — see 5A).
+# Re-derive (separate Bash call again — see Step 2).
 repo_root="$(git rev-parse --show-toplevel)"
 branch="$(git -C "$repo_root" rev-parse --abbrev-ref HEAD)"
 git -C "$repo_root" push -u origin "$branch"

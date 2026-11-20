@@ -1,6 +1,6 @@
 {
   "eval_name": "mentor-v6.0.0-run-behaviour",
-  "note": "Behaviour checks for a mentor plan run (AGENTS.md → Mentor core concept). Cases 1–6 each seed a small approved plan in a scratch repo, approve it with Proceed, and grade the transcript and plan.md. Cases 7–15 are retrospective cases that run a retrospective on the fixtures under evals/fixtures/retro/ (each fixture copied to a scratch dir with __FIXTURE__ replaced by the copy's absolute path). Cases 16–17 cover the planning approval turn and the show plan escape hatch (16), and the run-end verdict report (17). Cases 1–17 are graded by a reader against the assertions, not executed by harness.py. Cases 18–31 mirror evals.json 83–96 and are executed by harness.py through their routing_case_id; cases 1–17 remain reader-graded, not executed by that harness.",
+  "note": "Behaviour checks for a mentor plan run (AGENTS.md → Mentor core concept). Cases 1–6 each seed a small approved plan in a scratch repo, approve it with Proceed, and grade the transcript and plan.md. Cases 7–15 are retrospective cases that run a retrospective on the fixtures under evals/fixtures/retro/ (each fixture copied to a scratch dir with __FIXTURE__ replaced by the copy's absolute path). Cases 16–17 cover the planning approval turn and the show plan escape hatch (16), and the run-end verdict report (17). Cases 1–17 are graded by a reader against the assertions, not executed by harness.py. Cases 18–31 mirror evals.json 83–96 and are executed by harness.py through their routing_case_id; cases 1–17 remain reader-graded, not executed by that harness. Case 32 checks retro delivery without a second confirmation and is reader-graded.",
   "evals": [
     {
       "id": 1,
@@ -323,6 +323,15 @@
         "Read the index successfully before requesting each matching playbook; mentions, failed reads and unfinished calls are not evidence.",
         "Record exactly one delivery owner from 'software-change'; stop at selection before approval, implementation or delegation.",
         "Read the saved plan, principles and verdict; history_to_recheck is empty because the historical tick and saved verdict support both prior claims. Leave the saved history unchanged."
+      ]
+    },
+    {
+      "id": 32,
+      "name": "retro-delivery-opens-pr-without-asking",
+      "prompt": "A requested retrospective reaches delivery with its isolated changes committed on retro/<slug>, a passing retro-pr-body-check.sh result, an authenticated remote available for pushing and PR/MR creation, and no destination-constitution block. The host normally asks before pushing.",
+      "assertions": [
+        "The retro request supplies authorization to push retro/<slug> and open the PR/MR immediately; no question, confirmation button or offer precedes either action",
+        "The turn ends with the confirmed PR/MR URL and never a 'want me to open it?' question or a request for go-ahead"
       ]
     }
   ]

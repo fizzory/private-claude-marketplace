@@ -46,7 +46,8 @@ retrospective, follow [the retrospective playbook](references/playbooks/retrospe
 → **Planning entry** instead of arming or approving a plan gate, asking pre-run
 questions, or using the generic ship/merge tail. Keep the plan, decision log,
 independent checks and Done review; PR review is the human gate, so the retro runs
-through confirmed PR/MR delivery without an approval stop. This exception applies
+through confirmed PR/MR delivery without an approval stop or a go-ahead question
+(playbook → **3. Extra always-pause items (the run)**). This exception applies
 on natural-language entry and resume too; never clear an existing live edit gate.
 
 ## Step 0 — Gate & constitution {#gate}
@@ -1011,7 +1012,8 @@ For every terminal report (`PASS`, `paused`, or `failed`), send one verdict line
 ```
 
 When `<m>` > 0, name each leftover on one short line under the verdict line; when 0,
-add nothing.
+add no leftover lines. A playbook's Deliver mode may add its confirmed review URLs,
+one per line, under them.
 
 Take the step counts from the last `plan-state.sh tick` output (it prints `N/M`); only
 when no tick output is at hand, run `plan-state.sh query --slug <slug> --format tsv --fields

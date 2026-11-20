@@ -89,10 +89,12 @@ change reported as kept local. A pushed branch or compare URL does not pass.
 
 ### 3. Extra always-pause items (the run)
 
-For this requested retro, committing its isolated changes, pushing a new
-`retro/<slug>` branch and opening a PR/MR proceed without asking unless the destination's
+Treat the retro request as the user's go-ahead to commit its isolated changes,
+push a new `retro/<slug>` branch and open the PR/MR without asking unless the destination's
 constitution explicitly requires approval for that action. Read that constitution before
-delivery. PR review replaces plan approval, never a destination constitution's Always-pause
+delivery. Never ask "shall I open the PR?" or offer a go-ahead button merely because
+the host normally asks before pushing.
+PR review replaces plan approval, never a destination constitution's Always-pause
 item; when one blocks delivery, keep that repository's changes local under **Needs your call**
 and continue other repositories. Force-push and pushing to protected or base branches are
 never performed. Every always-pause action stays unapplied under **Needs your call** while
@@ -157,6 +159,7 @@ review contains only the retro's changes. Do not invoke shipping's full workflow
    [open-pr.md](../../../shipping/references/open-pr.md) with explicit repository root,
    branch, base, title and body file. Confirm the open PR/MR and its URL via `gh`/`glab`;
    a push or compare URL alone is **not opened** and is reported with the local changes.
+   A run that stops to offer or ask about opening the PR/MR instead of opening it is not done.
 6. **Sibling links.** Open all repositories' PRs/MRs first, then rewrite each body
    locally so **Not in this PR** links the others, or names the sibling repository
    and branch when linking is unavailable. Run `retro-pr-body-check.sh` on the
@@ -172,7 +175,8 @@ review contains only the retro's changes. Do not invoke shipping's full workflow
    branch before creating anything; reuse the confirmed review instead of opening a
    duplicate. Complete the Done review with PR URLs, kept-local paths/reasons, Backlog,
    constitution, core-concept and other-tool proposals. With zero applied changes,
-   open no PR and report the Done review in chat.
+   open no PR and report the Done review in chat. In chat, name each confirmed PR/MR
+   URL on its own line under the verdict line.
 
 The run is `done` when **2. Definition of done (Goal check and `Done when:`)** passes
 its final independent grade and the Done review reports every kept-local change and proposal.

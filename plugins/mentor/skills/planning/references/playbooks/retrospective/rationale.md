@@ -90,6 +90,11 @@ for review and a human-only merge. Plan approval would duplicate that review and
 interrupt the requested flow. The old local-only delivery rule had no stated reason;
 it left the human to assemble and open the review after the agent had done the work.
 
+Host defaults may ask before committing or pushing even when delivery is part of
+the task. The retro request is standing authorization for its own commits, the
+`retro/<slug>` push and PR/MR creation; the human gate is PR review, so a second
+confirmation adds noise.
+
 The retro never calls `approve-plan.sh`: it is not slug-targeted and can promote
 unrelated drafts. A validated draft moves directly to the existing `in_progress`
 state; the shared `begin-run <slug>` marker writer retains Claude's native Stop-hook

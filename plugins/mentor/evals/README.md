@@ -238,7 +238,7 @@ which skill fires — no question on a reversible fork, a pause on an always-pau
 decision-log row per choice, a verifier before every tick, a mid-run product call decided without pausing, and
 a non-code goal picking no playbook. Cases 1–6 each seed a scratch repo with an approved
 plan; cases 7–17 set up the state their prompt names. Each is
-graded by a reader against its assertions; `harness.py` does not run cases 1–17. Cases 18–31 mirror routing/selection cases 83–96 through `routing_case_id` and are executed by the harness. Their pre-approval scope is the selection boundary described above; full-run behaviour remains reader-graded.
+graded by a reader against its assertions; `harness.py` does not run cases 1–17. Cases 18–31 mirror routing/selection cases 83–96 through `routing_case_id` and are executed by the harness. Their pre-approval scope is the selection boundary described above; full-run behaviour remains reader-graded. Case 32 checks that a retro opens its PR/MR without a second confirmation and is reader-graded.
 
 v6.1.0 adds cases 7–15 for the retrospective playbook (scenarios S1–S8; S5 is two cases,
 #11 and #12): a plain repeated

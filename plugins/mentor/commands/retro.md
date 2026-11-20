@@ -11,6 +11,12 @@ one PR/MR per repository without plan approval. This facade uses planning's
 retrospective exception, decision log, independent verifier and Done review; the
 human reviews the PR/MR and only a human merges it.
 
+Running this command is the user's go-ahead to commit the retro's own changes,
+push `retro/<slug>` and open the PR/MR; do not ask, offer a button, or wait for a yes
+before any of them. A destination constitution that requires approval for one of
+them still wins: keep that repository local, unasked, per the playbook's
+**3. Extra always-pause items (the run)**.
+
 Do these in order:
 
 1. **Check for a live edit gate and distinguish resume from another run first.**

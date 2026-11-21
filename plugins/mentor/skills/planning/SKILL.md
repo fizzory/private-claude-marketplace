@@ -23,6 +23,14 @@ description: >
 
 Use a structured question UI when the host offers one; otherwise ask the same focused question directly and wait for the answer. If delegated agents are unavailable or prohibited, perform the required research, review, or implementation serially and retain the same evidence, scope, and verification contract. Treat Mentor helpers as optional host integrations: resolve them with `PLUGIN_ROOT` first, then `CLAUDE_PLUGIN_ROOT`; if neither is available, work from the repository's durable `.mentor/` artifacts and report any state action that cannot be performed safely. This rule overrides later host-specific tool names, preserving user choice and plan continuity across hosts.
 
+When the host reports that the user answered with a message instead of picking an option
+(for example "the user sent a message instead"), that message is the answer: read it and
+map it onto the open question. Never say the reply was lost or ask the user to repeat it;
+the message arrives in the next turn, and calling it lost teaches the user to stop using
+the question UI. For the approval question, Step 6 still governs what such a message can
+and cannot do. (Why: `references/rationale.md` → **Host portability — why a "sent a
+message instead" reply is the answer**.)
+
 The flow: check the gate & load the constitution → clarify if needed →
 create the draft, pick a playbook & research → triage open questions (evidence, decision-maker,
 human) → complete the Markdown plan (Goal check, decision log, Constitution Check
@@ -780,6 +788,11 @@ the routing: which flag to run — none or `--deliver` — is decided by *which 
 back*, so an unanswered question means you are guessing the outcome as well as the
 consent. Re-send the pointer card and re-ask.
 
+A message the host reports in place of an option pick still selects no option here, but
+it is not lost (Host portability): when it asks for changes, make them, then re-ask;
+when it only asserts approval, re-ask as above. In neither case claim that nothing came
+back.
+
 If the user types **"show plan" in Other**, print the full body once, then ask the same
 approval question again. Printing approves nothing; do not run `approve-plan.sh` for it.
 
@@ -980,7 +993,7 @@ For every terminal report (`PASS`, `paused`, or `failed`), send one verdict line
 
 When `<m>` > 0, name each leftover on one short line under the verdict line; when 0,
 add no leftover lines. A playbook's Deliver mode may add its confirmed review URLs,
-one per line, under them.
+one per line, under them, and one result line for a grade that runs after delivery.
 
 Take the step counts from the last `plan-state.sh tick` output (it prints `N/M`); only
 when no tick output is at hand, run `plan-state.sh query --slug <slug> --format tsv --fields

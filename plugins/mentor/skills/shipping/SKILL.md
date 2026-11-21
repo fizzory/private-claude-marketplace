@@ -41,8 +41,8 @@ replaced by the bullet here:
     Push to the base or a protected branch is always-pause.
   - **PR body:** the plan's `## Done review` plus the decision log grouped by use case,
     `review?: needed` rows first (5A → **PR body under a plan run**).
-  - **Step 6:** leave the plan state to the run, which closes it after merging's grade
-    (planning → After Proceed).
+  - **Step 6:** leave the plan state to the run, which closes it after merging's PR grade
+    (Step 3.5; planning → After Proceed).
   - **Step 7:** the test-command save offer becomes a decision-log row, then hand back
     to the playbook, which invokes `merging` next.
   - Append a decision-log row for every choice made here.

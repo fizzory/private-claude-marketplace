@@ -293,21 +293,32 @@ the same checks, one fragment at a time.
    worker's GAPS items indented under it; a regenerated fragment adds a new line, and the last line for a path
    counts. A build that stops before assembly resumes from these lines (§1) instead of regenerating every
    fragment.
-2. **Route gaps.** Every `unspecified` item and trace `QUESTION:`, from this run's reports and from
+2. **Self-explanation audit**, only when the page mocks up a UI surface, the plan's goal or constraints ask
+   for a minimal-copy or self-explanatory UI, and the plan is not yet approved (a §7 regeneration after
+   approval skips it; software-change's Run rules audit the built UI then): dispatch one agent that runs
+   `Skill(skill="mentor:frontend-self-ex-review")` in audit mode on the passed cells fragments and returns
+   findings only, so no mockup HTML enters the main thread (serially, when delegation is unavailable). A
+   low-text design tends to move meaning into hover, and catching that on the mockup costs nothing, where
+   catching it in Verification costs a fix round. Each finding that needs a product call becomes a
+   `QUESTION:` item routed in step 3; every other finding becomes a decision-log row in the plan (§6's
+   columns, `review?: needed`, then `record-write` as §6 does). Then regenerate `90-decisions.html` and
+   `00-head.html` (for the new stamp) and record them in `_built.md` before step 4 assembles, so the page is
+   not stale on delivery; §7 does not run inside §4. The mockup is not redrawn for these findings.
+3. **Route gaps.** Every `unspecified` item, trace or audit `QUESTION:` (step 2), from this run's reports and from
    `_built.md`, becomes a question in Questions for you (rewrite `10-answers.html`, and `00-head.html` and
    `99-foot.html`'s left-out list when the count of open questions changed or the section is new to the page;
    record each of its items as a `QUESTION:` line under its `_built.md` line, so a resume that rewrites it
    keeps every question);
    `untraced` items stay in Rules and edges. Fill the footer totals in `99-foot.html`.
-3. **Assemble** with the null-delimited command in `references/page-contract.md` §1, after deleting retired
+4. **Assemble** with the null-delimited command in `references/page-contract.md` §1, after deleting retired
    parts.
-4. **Check** with `references/page-contract.md` §8: doctype, closing `</html>`, non-zero size, unique ids, no
+5. **Check** with `references/page-contract.md` §8: doctype, closing `</html>`, non-zero size, unique ids, no
    script in hop or flow files, every contents and path link has its target, both assets inlined, and the 1 MB
    warning (the HTML only). These cost no context and catch a page truncated
    by a worker that died mid-write.
    Over 1 MB is a warning for the user, with the heaviest files (`wc -c`): screens stay whole, drawn from
    the app's real components, because a developer builds from them (contract §8). Nothing is cut to fit.
-5. **Look at it once** when the host has a browser tool (its own pane, or a headless browser; never the
+6. **Look at it once** when the host has a browser tool (its own pane, or a headless browser; never the
    user's browser, which only `open_page` in §5 may open): serve the folder
    in the background (`python3 -m http.server --bind 127.0.0.1 --directory "$review_dir" 8765`, stopped
    afterwards) if the tool cannot open a local file, then view each section in both themes (dark is the
@@ -441,12 +452,14 @@ Hand edits to `review.html` never flow back into the plan; the next regeneration
 - Every open question was asked one per turn, or there were none, or the run changed nothing (§6); for a
   mentor plan, each answer is a decision row in the plan.
 - For a plan subject, the page's `mentor-plan-sha256` equals the current plan's hash.
+- When §4 step 2 applied, the self-explanation audit ran on the mockup before the approval question, and each
+  finding was asked or logged.
 
 ### Do NOT
 
 - Do **not** write outside `.mentor/reviews/<subject-slug>/` except the three writes this skill names:
   `.mentor/.gitignore` through `mentor_ensure_gitignore` (§0), the `diagram_renderer` key in
-  `.mentor/config.json` (§2), and a decision-log row (or a first `## Decision log` table) in a mentor plan (§2, §6).
+  `.mentor/config.json` (§2), and a decision-log row (or a first `## Decision log` table) in a mentor plan (§2, §4 step 2, §6).
   Never the repo source.
 - Do **not** edit the subject beyond that decision row.
 - Do **not** read `_trace.md` in the main thread (§1), or let mockup HTML into it while workers run; workers

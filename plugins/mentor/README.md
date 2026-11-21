@@ -132,7 +132,7 @@ another host, invoke the matching skill or describe the same intent naturally.
 | `/mentor:retro [session]` | **Retrospective of a finished session** — rebuilds the session from disk (even across compactions, Claude/Codex subagents and agt workers), runs three lenses and a synthesizer, applies accepted skill changes, and opens one PR/MR per repository without plan approval. Resumes its own saved retro; refuses another active/paused run or a live own/legacy gate, leaving that gate untouched. Missing `jq` stops entry. Changes without available delivery stay local and are reported; only a human merges. Offered after a completed run, never auto-started. `--claude-config` / `--codex-home` / `--agt-home` select transcript roots. |
 | `/mentor:preview [subject]` | **One scenario-based review page for a plan or any subject** — a repo subsystem, a doc, a mentor plan, or the thing under discussion; no plan file or planning session required. Draws only what the subject changes: a mockup of every surface each scenario reaches (each edge case its own card, Before/After per scenario), each sequence under the scenario that starts it, the C4 levels that move, the changed data and contracts, and the decisions; every card has a comment box with Copy, and open questions come back to chat one at a time. Writes `.mentor/reviews/<subject-slug>/review.html` (gitignored), opens it, and offers to publish it on Claude. `planning` Step 5 delegates here for an in-planning page. |
 | `/mentor:ship` | Finish the current branch: clean-check → `/simplify` → tests → push + auto-open PR/MR (or push to upstream). Standalone it asks; inside a plan run (the software playbook's deliver mode) it follows the plan's Definition of done and puts the Done review in the PR body. Never force-pushes. |
-| `/mentor:merge [PR#]` | The tail `/mentor:ship` leaves off: one bounded `gh pr checks --watch`, then one triage — flake (one rerun max) / regression (stop and report) / already broken on the base branch (don't spend the rerun; you choose **Merge anyway** or **Leave open**, and any leftover work is named in the report) — then an independent verifier grades the PR, and it merges only on your explicit choice (or under a constitution that grants merge), then walks the runbook's after-merge steps, pausing on always-pause lines. GitHub-only. |
+| `/mentor:merge [PR#]` | The tail `/mentor:ship` leaves off: one bounded `gh pr checks --watch`, then one triage — flake (one rerun max) / regression (stop and report) / already broken on the base branch (don't spend the rerun; you choose **Merge anyway** or **Leave open**, and any leftover work is named in the report) — then an independent verifier grades the PR, and it merges only on your explicit choice (or under a constitution that grants merge), then walks the runbook's after-merge steps, pausing on always-pause lines, and inside a plan run has a fresh verifier grade that walk. GitHub-only. |
 | `/mentor:grill [topic]` | One-question-at-a-time interview that sharpens a design's open decisions before you approve — also the route for a plan-quality review before approval. Asks only product calls; evidence- and constitution-settleable questions are settled without asking. Conversation only, pre-approval only. |
 | `/mentor:constitution [principles]` | Create/amend this repo's governing principles and autonomy contract (Always-pause list, Decision authority, Definition of done) at `.mentor/constitution.md` — versioned, committed, and honored by every plan and run. |
 
@@ -262,7 +262,7 @@ State is **project-scoped** — `<repo>/.mentor/`, with one dir per plan topic:
 │   └── <slug>/      #   plan.md (+ ## Goal check, ## Decision log, ## Done review)
 │       ├── .state.json # lifecycle state + relations + plan_sha256 — written only by plan-state.sh
 │       ├── evidence/   # v6: captured logs, screenshots, probe scripts (the run)
-│       └── verdicts/   # caller saves returned blocks: step-N.md · topic-N.md · goal.md · pr.md
+│       └── verdicts/   # caller saves returned blocks: step-N.md · topic-N.md · goal.md · pr.md · after-merge.md
 └── reviews/         # /mentor:preview pages — <subject-slug>/review.html (+ _ids.md,
                      #   _plan.md, _brief.md, _trace.md, _built.md, _parts/,
                      #   shots/)                                           ← gitignored
@@ -601,6 +601,27 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_OPENER` | `auto` (default) · `vscode` · `chrome` · `system` |
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
+
+## Changes in v7.2.0
+
+Compatibility decision: **non-breaking minor: five run rules from a plan-run retro; no
+workflow-state change** (closes #11).
+
+- **Self-explanation audit, twice.** When a plan asks for a minimal-copy UI, previewing
+  runs `frontend-self-ex-review` on the mockup before the approval question (§4 step 2),
+  and software-change runs it again on the built UI before that step's grade.
+- **Persona sign-in research.** Software-change research cites how each persona in a
+  permission scenario signs in, and checks that the endpoint accepts that channel.
+- **"Sent a message instead" is the answer.** Planning reads such a message as the reply
+  and never calls it lost. For approval it still selects no option.
+- **After-merge grade.** Inside a plan run, when the runbook has After-merge lines, a
+  fresh verifier grades the walk, the post-merge plan clauses and the full shipped delta
+  (`verdicts/after-merge.md`). Its gaps go to Leftovers; until it runs, the Done review
+  says post-merge steps were not independently graded. A deploy line's pause question
+  shows the commits it ships.
+- **Grader access modes.** Every verifier brief names `read-only` or `scratch-write`.
+  Scratch-write is the default for grades that compile or run integration tests: caches,
+  temp files and runner-made fixtures may be written; tracked files and `.mentor/` may not.
 
 ## Changes in v7.1.0
 

@@ -186,3 +186,54 @@ Two consequences to tell the user about while you do it:
   writes. If any step is ticked, work has already shipped: surface that to the user as a
   rollback decision (revert the work, or keep it and re-plan the remainder) instead of
   quietly writing a state that will not take.
+
+## Host portability — why a "sent a message instead" reply is the answer
+
+Some hosts return a marker such as "the user sent a message instead" in place of an
+option pick, and the user's actual reply arrives in the next turn. In one plan run five
+approval asks in a row (revisions 3 to 7) came back with that marker. Three times the
+agent told the user their reply "hasn't come through", and each time the user's change
+request arrived right after. The approval rule ("Prose selects no option") was right
+about consent, but it read as "the reply was lost". The fix keeps the consent rule whole
+(a message never approves) and removes only the false claim: a change request is made
+and re-asked, a bare assertion of approval is re-asked, and neither is reported as lost.
+Source: issue #11 item 3.
+
+## Software-change research — why each persona's sign-in channel is cited
+
+A gap review of one draft plan found its permission scenario built on a machine-only
+role: a person could not select that role, and its application tokens could not call
+the RPC in question. Planning had already designed a grant migration for that persona,
+which was then dropped along with the rollback hazard it carried. Previewing's rule to
+check each hop against its emitter's guard is about drawing guards correctly; it never
+asked planning to prove the persona can reach the endpoint at all. Citing the sign-in
+channel with `file:line` during research makes that a fact settled before the plan is
+written. Source: issue #11 item 2.
+
+## Verifier contract — why there is an After-merge grade
+
+Every mentor grade used to end at the pre-merge PR grade, so everything after the merge
+ran ungraded. In one run the plan required a quiet release slot and a named deploy
+procedure for its production stage, and edited the feature's own smoke check. After the
+merge none of the three happened; the release gate was a handful of health checks and
+one page probe. The release also carried ten commits from three other authors whose
+pages nobody checked, and the user had to ask twice for that commit breakdown. Merging
+already walked and logged the After-merge lines, but logging a line is not grading it
+against the plan. The grade runs only when the runbook has After-merge lines (the owner
+chose this over grading every delivery, to keep code-only PRs free of the extra pass),
+and since the merge has landed, its gaps become Leftovers rather than a re-plan. Showing
+the shipped delta in a deploy line's pause question answers the commit-breakdown
+question before anyone has to ask it. Source: issue #11 item 4.
+
+## Verifier contract — why compiled grades get scratch-write access
+
+A strictly read-only grader cannot run compiled or integration checks: the toolchain
+needs somewhere to write. In one run a grader in a read-only sandbox could not create
+Go's build cache and handed back; the same checks passed once caches pointed at
+writable, ignored locations. Another Verification topic handed back over gitignored
+fixtures the test runner generates itself. Each HANDBACK was a verdict on the
+environment, not the code, and cost a re-dispatch. Scratch-write keeps the guarantee
+that matters (the tracked tree is unchanged, proved by matching `git status --porcelain`
+before and after) while letting caches, temp directories and runner-made fixtures be
+written. It is the default for compiled grades because the brief writer otherwise has
+to remember it every time. Source: issue #11 item 5.

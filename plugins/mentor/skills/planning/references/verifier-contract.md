@@ -1,9 +1,9 @@
 # Verifier prompt and return contract
 
 Read this whenever a run needs a grade: after each implementation step, for each
-`## Verification` topic, for the plan's `## Goal check`, and before a playbook's
-merge. The agent that built the work never grades it (AGENTS.md → Mentor core
-concept, rule 5). Paste the fenced block under "What the verifier must return"
+`## Verification` topic, for the plan's `## Goal check`, before a playbook's
+merge, and after its After-merge walk. The agent that built the work never grades it
+(AGENTS.md → Mentor core concept, rule 5). Paste the fenced block under "What the verifier must return"
 into every verifier's prompt verbatim. A verifier briefed only with "check step 3"
 re-derives the criteria from memory and confirms instead of checking.
 
@@ -15,6 +15,13 @@ re-derives the criteria from memory and confirms instead of checking.
 | Topic | `## Verification` topic | its `Focus:`, `Checks:`, `Pass when:` lines, verbatim |
 | Goal check | plan | the `## Goal check` predicate and the `## Done review` |
 | Merge (playbook) | pull request | the PR diff, the plan path, the Goal check |
+| After-merge (playbook) | After-merge walk, only when the runbook has **After merge** lines | those lines and each one's logged result; every plan clause scoped to a stage after the merge (release, deploy, smoke check), verbatim; the full delta that shipped, including commits from outside the plan (commit, author, change) |
+
+- **After-merge grade.** Mentor's other grades all end before the merge, so without this
+  one a plan clause about a deploy or a post-release check can be dropped unnoticed. When
+  it runs or is skipped, and where its gaps go, belong to merging → **Step 6 — The
+  post-merge run, and the After-merge walk**. (Why: `rationale.md` → **Verifier contract
+  — why there is an After-merge grade**.)
 
 - Resolve the verifier through planning → "Role resolution". Scheduling, model,
   and effort come from the host's verifier role; the caller must wait for its returned
@@ -33,8 +40,21 @@ re-derives the criteria from memory and confirms instead of checking.
   The grade must serve that outcome.
 - The lines named in the table above, copied verbatim, never paraphrased.
 - The exact file paths, and the plan path `.mentor/plans/<slug>/plan.md`.
-- The grade identity (`Step N`, `Topic N`, `Goal check`, or `PR`) and the author's
-  model family, or `unknown`. Ask the verifier to report its actual family or `unknown`.
+- The grade identity (`Step N`, `Topic N`, `Goal check`, `PR`, or `After-merge`) and the
+  author's model family, or `unknown`. Ask the verifier to report its actual family or
+  `unknown`.
+- The access mode, named in one line (`Access: read-only` or `Access: scratch-write`).
+  A compiler or test runner needs somewhere to write, so a strictly read-only grader
+  hands back on its environment instead of grading the code:
+  - **scratch-write**, the default for a grade that compiles code or runs integration
+    tests. The grader may write tool caches, temp directories and files the check runner
+    writes by itself, outside the repo or in ignored paths outside `.mentor/` (which holds
+    the plan and its verdicts). Everything else stays unchanged, proved before and after
+    by the playbook's tree-state check (software change: `software-change.md` §2).
+  - **read-only**, for a grade that only reads code, docs or output.
+
+  (Why: `rationale.md` → **Verifier contract — why compiled grades get scratch-write
+  access**.)
 - Any tool invocation already resolved this session (module path, launch flags), so
   the verifier does not rediscover it.
 - Earlier check output and its source verdict, when proposing reuse under
@@ -67,7 +87,7 @@ state and timing-sensitive repeats, including the independent runs required abov
 
 ```
 Verdict: PASS | FAIL | HANDBACK
-Grade: Step N | Topic N | Goal check | PR
+Grade: Step N | Topic N | Goal check | PR | After-merge
 Grading: independent | self-graded
 Author family: <actual family, or unknown>
 Verifier family: <actual family, or unknown>
@@ -75,7 +95,7 @@ Verifier family: <actual family, or unknown>
 
 Gaps / Missing:
 <one stamped line per gap, or the literal words "none found">
-  [GOAL] <finding> — which `Done when:` / `Pass when:` / Goal check it leaves unmet — fix: <a few words>
+  [GOAL] <finding> — which `Done when:` / `Pass when:` / Goal check it leaves unmet (an After-merge grade names the After-merge line or post-merge plan clause instead) — fix: <a few words>
   [NON-GOAL][SMALL] <finding> — why the goal is met without it — fix: <a few words>
   [NON-GOAL][LARGE] <finding> — why the goal is met without it — fix: <a few words>
 
@@ -119,16 +139,17 @@ Cross-topic:
 
 The caller decides what a verdict triggers: planning → "After Proceed" for a step,
 topic, or Goal check (topics and Goal checks never tick a step), and merging →
-"Step 3.5" for a merge.
+"Step 3.5" for a merge and "Step 6" for the After-merge grade.
 **HANDBACK** is a verdict on the brief: repair the brief or the check and re-dispatch
 fresh, with the remainder as its inputs. It costs no retry (merging caps it at one
 repair per PR).
 
 The caller saves every returned block verbatim, including FAIL and HANDBACK, under
-`.mentor/plans/<slug>/verdicts/`: `step-N.md`, `topic-N.md`, `goal.md`, or `pr.md`.
+`.mentor/plans/<slug>/verdicts/`: `step-N.md`, `topic-N.md`, `goal.md`, `pr.md`, or
+`after-merge.md`.
 The block includes the `Grade:`, `Grading:`, `Author family:`, and `Verifier family:`
 headers above. Persistence belongs to the caller, so a read-only verifier can grade.
-Write `verdicts/pr.md` only inside a plan run; standalone merging keeps its existing
+Write `verdicts/pr.md` and `verdicts/after-merge.md` only inside a plan run; standalone merging keeps its existing
 reporting behavior without creating a plan artifact.
 
 Overwrite `verdicts/step-N.md` with the latest grade on every re-grade; no reader uses

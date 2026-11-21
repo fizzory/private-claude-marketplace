@@ -174,6 +174,12 @@ Inside a plan run without a merge grant, the question is the hand-over, not a pa
 Once the PASS is in and the Done review is written, `set <slug> implemented`, remove
 the run marker, then ask. Write no `paused` row.
 
+Inside a plan run, with or without a merge grant, when the runbook has **After merge**
+lines, the Done review carries one line, `Post-merge steps: not independently graded
+unless merged in this session`. Step 6's After-merge grade replaces it; on every other
+branch (Leave open, auto-merge, a merge outside the session, a paused walk) it stays, so
+the review never implies a check that did not run.
+
 Without a merge grant, ask via `AskUserQuestion`, with the runbook's **Before merge** block from the plan's
 `## Done review` (or `Runbook: n/a, merge is self-contained`) and the verifier's grade in
 the question text. **Every question stands on its
@@ -248,7 +254,10 @@ user says no → say what you found and stop; never hand-edit `.state.json`.
 **After-merge walk.** When the plan's Done review carries a runbook, walk its **After
 merge** steps in order once the merge landed. Execute a line only when it is not on the
 always-pause list; a deploy, a production config change, a data migration, or a message
-to people outside the session pauses with that line as the one question. Log a row per
+to people outside the session pauses with that line as the one question. A deploy line's
+question also shows the delta it would ship, one row per commit (commit, author, change,
+time) from `git log <deployed-ref>..<merge-sha>`, because a release can carry other
+people's commits and the user should not have to ask what goes out. Log a row per
 line (`PASS`, `paused`, or `FAIL`). Rollback lines are shown, never run, unless the human
 asks. Inside a plan run Step 4 already set `implemented`, so a paused After-merge line
 leaves the state `implemented` and goes into the Done review's Leftovers.
@@ -300,6 +309,16 @@ touched one. Say so in one report line when the merged diff touched any of
 `**/terraform/**` — deploying is separate from merging, and leaving it unstated is how a
 user ends up improvising a from-scratch deploy investigation later. Never deploy it here.
 
+**After-merge grade.** Inside a plan run, when the runbook has **After merge** lines, the
+walk ended with none paused, and any post-merge run the walk depends on came back green
+(the watch above), dispatch one fresh
+verifier per `planning/references/verifier-contract.md` (the **After-merge** row), wait,
+and save its block to `verdicts/after-merge.md`. Every earlier grade ended before the
+merge, so this is the only check that post-merge plan clauses actually happened. Its
+`[GOAL]` gaps go into the Done review's Leftovers; it never re-plans or reverts. Replace
+the Done review's `Post-merge steps:` line (Step 4) with the verdict and its path; when
+the grade does not run, the line stays.
+
 ## Done when
 
 - The PR was resolved (argument or current branch), its checks reached a terminal
@@ -322,4 +341,6 @@ user ends up improvising a from-scratch deploy investigation later. Never deploy
   run, watched once without asking when the Goal check or an After-merge line depends
   on it, otherwise logged as not watched (Step 6) — never polled in a loop.
 - A merge was offered only after an independent verifier graded the PR (Step 3.5), and
-  the runbook's After-merge lines ran or paused one by one, each logged.
+  the runbook's After-merge lines ran or paused one by one, each logged; inside a plan
+  run a walk of After-merge lines that ended unpaused got an After-merge grade, or the
+  Done review says post-merge steps were not independently graded.

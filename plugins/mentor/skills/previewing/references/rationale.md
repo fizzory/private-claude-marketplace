@@ -361,8 +361,9 @@ finding in Verification. Source: issue #11 item 1.
 compaction. After each of 23 compactions the main thread reloaded `plan.md` (62 reads, 427 KB in all)
 and `_ids.md` (44 reads, 522 KB) whole, to find the few sections the next step needed. `scripts/md-slice.sh`
 prints a heading index with sizes, then only the matching sections or decision-log rows, so a reload costs
-the index plus what the step names. One whole read stays allowed: pinning the trace worker's draft needs
-all of it.
+the index plus what the step names. Two whole reads stay allowed: pinning the ids (a re-run's or
+revision's redraft is a new pin) needs all of `_ids.md`, and writing `90-decisions.html` needs the whole
+decision log.
 
 **The wave cap.** Six cells workers per wave had no recorded reason. That run had eleven cells slices, so
 five waited for a second wave, about 11 minutes after the first. Twelve covers it in one wave; "fewer when

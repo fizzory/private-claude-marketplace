@@ -341,3 +341,35 @@ a script-disabled `<iframe srcdoc>` with no switching, skipped surfaces with no 
 publishing. All three conflict with this skill: switching is CSS radios on the page, the change predicate
 replaces the visual-delta rule, and the page may be offered as an Artifact. `surface-mockup-contract.md`
 replaces it and covers every surface; the `mentor:frontend-mockup` token it introduced is kept.
+
+## Main-thread reads by heading, and twelve cells workers per wave
+
+**Incident (repository-tags review page, 2026-11-20).** The build took 252 minutes, 98 of them in
+compaction. After each of 23 compactions the main thread reloaded `plan.md` (62 reads, 427 KB in all)
+and `_ids.md` (44 reads, 522 KB) whole, to find the few sections the next step needed. `scripts/md-slice.sh`
+prints a heading index with sizes, then only the matching sections or decision-log rows, so a reload costs
+the index plus what the step names. One whole read stays allowed: pinning the trace worker's draft needs
+all of it.
+
+**The wave cap.** Six cells workers per wave had no recorded reason. That run had eleven cells slices, so
+five waited for a second wave, about 11 minutes after the first. Twelve covers it in one wave; "fewer when
+the host or a router caps concurrent jobs" keeps a router's own job limit in charge.
+
+**Tried and dropped: one input file per cells worker.** A helper cut each worker's `_ids.md` entries, its
+`_trace.md` sections, the cited plan sections and the reference sections into one file (about 150 KB for
+`w8`), so the worker would read one slice instead of whole files. Measured on a copy of that run's inputs,
+one slice (`w8`: S4a h3, S5 h3/h5/h6) as a Claude subagent with agt roles off, old brief against slice
+brief, both stopped unfinished at 68.9 minutes:
+
+| Brief | Tool calls | Tool-result bytes | Input tokens | Compactions |
+|---|---|---|---|---|
+| Old (whole files) | 278 | 1.34 MB | 42.8 M | 20 |
+| One-file slice | 238 | 2.05 MB (1.13 MB = 36 re-reads of the slice) | 37.3 M | 26 |
+
+The slice was re-read after every compaction, which cancelled what it saved, and both runs spent 105–123
+calls re-reading `$BASE` source the trace had already covered. In the live run Codex finished that same
+slice in 66 calls, 2.7 M tokens and 7 minutes. The per-worker cost is the worker's own re-tracing and its
+pack size, not how its inputs are laid out.
+
+**Not addressed here:** the trace worker's own time, cells workers re-tracing `$BASE`, and the 30-frame
+pack size. Smaller packs, or one card per worker, are the next lever to measure.

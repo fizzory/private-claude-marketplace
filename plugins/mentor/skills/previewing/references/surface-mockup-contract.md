@@ -413,8 +413,8 @@ non-plan subject.
   frame that embeds a full template or `srcdoc` counts as one frame per 4 KB of its markup.
 - **Packing.** Pack card-by-group slices into workers of at most **30 frames**, filling one before opening
   the next. A slice over 30 frames splits between hops, since each hop file has exactly one writer. A worker
-  may hold several groups, and 30 frames or fewer in total is one worker. At most **6** cells workers run per
-  wave; leftover slices run in a second wave.
+  may hold several groups, and 30 frames or fewer in total is one worker. How many run per wave:
+  `SKILL.md` §3.
 - **Style files.** Each worker writes one `001-style-<group>-w<n>.html`, named for the first group it holds,
   so no two workers write one file.
 

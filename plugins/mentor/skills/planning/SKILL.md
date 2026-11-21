@@ -364,7 +364,8 @@ principle in the decision log only when it changes a choice, so the log records
 decisions rather than a checklist.
 Triage each item into exactly one bucket, in this order:
 
-1. **Codebase-answerable** — the files, config, history, or docs settle it.
+1. **Codebase-answerable** — the files, config, history, or docs settle it, or the
+   plan's decision log already does (grep it first).
    Answer it yourself; never ask the human what the material can answer.
 2. **Experiment-settleable** — a fact a quick probe can establish (does this
    flag exist, which form does the tool accept, how long does it take). Run the
@@ -407,12 +408,22 @@ intended outcome.
 **Decision-maker contract** — apply to whichever agent resolves a decision:
 
 - **Brief** (self-contained; the agent inherits none of your context): open with the
-  goal as above, then the question in plain words, the options known so far with their consequences, the
+  goal as above, then each question in plain words with the options known so far and their consequences, the
   constitution's Decision authority section verbatim, and the evidence with
   `file:line` or command output.
-- **Return**: `choice · why · evidence · product_call: yes|no`. A `yes` sends the
-  item to bucket 4. Several independent items may go out in one batch.
+- **Return**, per item: `choice · why · evidence · product_call: yes|no`, plus one
+  `needs: <role> · <question>` line for anything another role must settle first. A
+  `yes` sends that item to bucket 4.
+- **One round at a time, batched.** Send every item that is ready as one brief per
+  role, and all the roles' briefs in one message, so they run in parallel. A `needs:`
+  line goes into that role's brief in the next round; never message a running
+  decision agent with it.
+- **Never wait idle on a round.** Keep on with the triage, research and drafting that do
+  not depend on it, and collect its results when they arrive.
+- **Effort, model and provider** come from an explicit session mapping when it names
+  them, otherwise from the host's or router's role config; a brief never picks them.
 - Every decision becomes one decision-log row (Step 4), `result: decided`.
+- Why: `references/rationale.md` → "Step 3 — why decision agents go out in rounds".
 
 **Mid-loop scope change.** A scope-change request (not a decision *answer* —
 a change to what the plan covers) pauses the per-item loop: confirm the scope

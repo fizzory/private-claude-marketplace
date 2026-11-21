@@ -51,7 +51,9 @@ once-per-session planning-intent nudge for conversational planning requests. Bef
 subcommand, amend this paragraph first: if the addition contradicts it, the addition is
 wrong. `plan-state.sh begin-run <slug>` shares the existing run-marker writer with
 approval; `retro-pr-body-check.sh` is a read-only CLI for PR-body structure and
-redaction, not a hook or run sequencer. (The v1.0.0 slim-down regrew 32 → 79 files in five weeks; this paragraph and
+redaction, not a hook or run sequencer; previewing's `scripts/md-slice.sh` is a read-only CLI
+that prints a Markdown file's heading index, sections or numbered table rows, not a hook or run
+sequencer. (The v1.0.0 slim-down regrew 32 → 79 files in five weeks; this paragraph and
 `hooks/tests/test-hook-roster.sh` exist so it doesn't again.)
 
 ## Quick start
@@ -237,7 +239,7 @@ Since v3.0.0 that binds automated contributors in a stronger form as well: **new
 land as skill prose or `references/rationale.md` — never as new hooks, new scripts, new
 state tokens, or new `plan-state.sh` subcommands.** (v6.0.0's Stop hook/run marker,
 v6.3.0's plan-file pointers/hash commands, and v6.5.0's `plan-state.sh begin-run`
-subcommand and `retro-pr-body-check.sh` CLI are sanctioned exceptions, added by
+subcommand and `retro-pr-body-check.sh` CLI, and previewing's read-only `md-slice.sh`, are sanctioned exceptions, added by
 human-approved plans that amended the charter first — the route any future machinery
 takes too.) A new domain's know-how lands as a new
 indexed reference under `skills/planning/references/playbooks/`, never as domain text

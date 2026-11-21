@@ -53,7 +53,7 @@ the push, the same write is just a file waiting to be committed.
 ## Step 7 — how the config.json merge works
 
 This is an in-place `jq` merge through a temp file, and that shape is the point: the `.k = $v`
-assignment preserves every other key (`constitution_path`, the context-gate keys, any legacy ones), and
+assignment preserves every other key (`constitution_path`, `planning_intent`, any legacy ones), and
 the `&&` means a `jq` failure leaves the original byte-identical — so there is
 no second backup-and-restore dance to keep true for the same file. On the
 create branch, a config written without `.mentor/.gitignore` beside it would

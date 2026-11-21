@@ -7,10 +7,11 @@
 # lives inside it):
 #   <repo_root>/.mentor/
 #   ├── .gitignore        # commit config.json + constitution.md; ignore transient state
-#   ├── config.json       # {"context_gate", "context_*_tokens", "context_*_ratio",
-#   │                     #   "test_command",
+#   ├── config.json       # {"test_command", "planning_intent", "constitution_path",
+#   │                     #   "continue", "continue_max_idle_blocks",
 #   │                     #   "diagram_renderer": "diagram-design|fallback" (previewing) ...}
-#   │                     #   (pre-5.0 "mode"/"dispatch" keys are ignored if present)
+#   │                     #   (pre-5.0 "mode"/"dispatch" keys and pre-7.0 "context_*"
+#   │                     #   keys are ignored if present)
 #   ├── constitution.md   # governing principles (committed; managed by /mentor:constitution)
 #   ├── plans/            # one .planning.<wt-id> gate marker PER WORKTREE (v2.23.0,
 #   │                     #   mentor_worktree_id/mentor_plan_marker below) + one <slug>/
@@ -27,7 +28,8 @@
 #   │                        #   jq-defaulted to []/null/"".
 #   └── reviews/          # mentor:previewing pages — <subject-slug>/review.html, _ids.md,
 #                         #   _plan.md, _parts/ (fragments) and shots/ (captured pictures)
-#   (.context-warned-<session_id> markers live at the .mentor/ root.)
+#   (Leftover pre-7.0 `.context-*` markers at the .mentor/ root are inert: nothing
+#   reads them, and they are safe to delete.)
 #   Not inside a git repo → callers use mentor_no_repo_state_dir. New installs
 #   default to the XDG state tree; an existing Claude-era fallback is preserved.
 #
@@ -1153,69 +1155,7 @@ mentor_plan_state_write() {
   return 0
 }
 
-# --- context gate -----------------------------------------------------------
-
-# mentor_context_tokens <transcript_path> — echo the current main-chain context size
-# in tokens (the last assistant usage record, or the postTokens of a later
-# compact_boundary), or empty when unmeasurable (no file / no jq / no usage in the tail
-# window). Skips subagent sidechains and <synthetic> all-zero API-error placeholders.
-mentor_context_tokens() {
-  local tx="${1:-}" last
-  [ -z "$tx" ] && { echo ""; return 0; }
-  [ -f "$tx" ] || { echo ""; return 0; }
-  command -v jq >/dev/null 2>&1 || { echo ""; return 0; }
-  last="$(tail -n "${MENTOR_CONTEXT_TAIL_LINES:-400}" "$tx" 2>/dev/null | jq -R -r '
-    fromjson? | select(type == "object") | select(.isSidechain != true)
-    | if .type == "assistant" then
-        (.message.usage? // empty) | select(type == "object")
-        | select(.input_tokens != null)
-        | ((.input_tokens // 0) + (.cache_read_input_tokens // 0) + (.cache_creation_input_tokens // 0))
-        | select(. > 0)
-      elif .type == "system" and .subtype == "compact_boundary" then
-        (.compactMetadata.postTokens // 0) | select(. > 0)
-      else empty end' 2>/dev/null | tail -n 1)"
-  case "$last" in
-    ''|*[!0-9]*) echo ""; return 0 ;;
-  esac
-  echo "$last"
-  return 0
-}
-
-# mentor_context_threshold <repo_root> <env_value> <config_key> <default> — resolve a
-# numeric threshold with precedence env > config.json > default. A candidate wins only
-# if all-digits; otherwise fall through. Echoes the chosen integer.
-mentor_context_threshold() {
-  local repo_root="${1:-}" env_value="${2:-}" config_key="${3:-}" default="${4:-}" cfg
-  case "$env_value" in
-    ''|*[!0-9]*) ;;
-    *) echo "$env_value"; return 0 ;;
-  esac
-  cfg="$(mentor_config_get "$repo_root" "$config_key")"
-  case "$cfg" in
-    ''|*[!0-9]*) ;;
-    *) echo "$cfg"; return 0 ;;
-  esac
-  echo "$default"
-  return 0
-}
-
-# mentor_context_ratio <repo_root> <env_value> <config_key> <default> — the decimal twin
-# of mentor_context_threshold (which rejects anything but digits): precedence env >
-# config.json > default, and a candidate wins only if it is a plain decimal (`0.5`, `.65`,
-# `1`) in (0, 1]; otherwise fall through. Parsed with awk under LC_ALL=C so a
-# comma-decimal locale can't misread it. Echoes the chosen ratio as written.
-mentor_context_ratio() {
-  local repo_root="${1:-}" env_value="${2:-}" config_key="${3:-}" default="${4:-}" cand
-  for cand in "$env_value" "$(mentor_config_get "$repo_root" "$config_key")"; do
-    if printf '%s\n' "$cand" | LC_ALL=C awk '
-         NR == 1 && /^[0-9]*\.?[0-9]+$/ { v = $0 + 0; if (v > 0 && v <= 1) ok = 1 }
-         END { exit !(ok && NR == 1) }' 2>/dev/null; then
-      echo "$cand"; return 0
-    fi
-  done
-  echo "$default"
-  return 0
-}
+# --- machine-level state base ------------------------------------------------
 
 # mentor_host_state_base <host> — echo mentor's machine-level state base for a host:
 # MENTOR_STATE_HOME, else the host's config dir (claude: ${CLAUDE_CONFIG_DIR:-~/.claude}/mentor,
@@ -1230,165 +1170,6 @@ mentor_host_state_base() {
     *)      dir="${XDG_STATE_HOME:-${HOME}/.local/state}" ;;
   esac
   echo "${dir%/}/mentor"
-  return 0
-}
-
-# mentor_session_dir <host> <session_id> — echo <base>/sessions/<session_id> under
-# mentor_host_state_base, or empty when the id is not [A-Za-z0-9_-]+ (it comes from hook
-# stdin and reaches a path, so `/` or `..` must never get through). Read-only here: not
-# mkdir'd, never pruned.
-mentor_session_dir() {
-  local host="${1:-}" sid="${2:-}"
-  case "$sid" in
-    ''|*[!A-Za-z0-9_-]*) echo ""; return 0 ;;
-  esac
-  echo "$(mentor_host_state_base "$host")/sessions/${sid}"
-  return 0
-}
-
-# mentor_context_window <repo_root> [session_id] [host] — echo the window the host
-# compacts at, in tokens, or 0 when unknown. NEVER guessed: each source is a number the
-# user set or the host reported, in precedence MENTOR_CONTEXT_WINDOW (env) >
-# context_window_tokens (config) > CLAUDE_CODE_AUTO_COMPACT_WINDOW > the session dir's
-# `context-window` file (a bare integer a host adapter writes; host defaults to claude).
-# A source that is not a positive integer falls through. Nothing infers a window from
-# the model name, the transcript, or a compaction percentage.
-mentor_context_window() {
-  local repo_root="${1:-}" sid="${2:-}" host="${3:-claude}" cand sdir file_val=""
-  sdir="$(mentor_session_dir "$host" "$sid")"
-  if [ -n "$sdir" ] && [ -f "${sdir}/context-window" ]; then
-    file_val="$(head -n 1 "${sdir}/context-window" 2>/dev/null || true)"
-  fi
-  for cand in "${MENTOR_CONTEXT_WINDOW:-}" "$(mentor_config_get "$repo_root" context_window_tokens)" \
-              "${CLAUDE_CODE_AUTO_COMPACT_WINDOW:-}" "$file_val"; do
-    case "$cand" in
-      ''|*[!0-9]*) continue ;;
-    esac
-    cand=$(( 10#$cand ))   # leading zeros must not read as octal
-    if [ "$cand" -gt 0 ]; then echo "$cand"; return 0; fi
-  done
-  echo 0
-  return 0
-}
-
-# mentor_context_limits <repo_root> [session_id] — echo "<warn> <warn_high> <high>
-# <rearm> <window>", the one derivation of the context thresholds (context-gate.sh,
-# context-checkpoint.sh and mentor_context_verdict all read it):
-#   warn = min(warn_ratio × window, warn cap)    high = min(high_ratio × window, high cap)
-# The caps are the historical token knobs (context_warn_tokens 200000,
-# context_block_tokens 350000); the ratios (context_warn_ratio / context_high_ratio)
-# default to 0.5 / 0.65. warn_high is context_warn_high_tokens, else 90% of high. The
-# clamp keeps warn ≤ warn_high ≤ high and only ever LOWERS a value, so a limit set low
-# pulls the tiers under it. rearm (the WARN re-fire step) is 10% of the window, or a
-# quarter of warn when the window is unknown. window is 0 when unknown: only the caps
-# apply then, which are the pre-v4.3.0 thresholds (the clamp aside).
-mentor_context_limits() {
-  local repo_root="${1:-}" sid="${2:-}" warn high warn_high rearm window warn_ratio high_ratio
-  warn="$(mentor_context_threshold "$repo_root" "${MENTOR_CONTEXT_WARN_TOKENS:-}" context_warn_tokens 200000)"
-  high="$(mentor_context_threshold "$repo_root" "${MENTOR_CONTEXT_BLOCK_TOKENS:-}" context_block_tokens 350000)"
-  window="$(mentor_context_window "$repo_root" "$sid")"
-  if [ "$window" -gt 0 ]; then
-    warn_ratio="$(mentor_context_ratio "$repo_root" "${MENTOR_CONTEXT_WARN_RATIO:-}" context_warn_ratio 0.5)"
-    high_ratio="$(mentor_context_ratio "$repo_root" "${MENTOR_CONTEXT_HIGH_RATIO:-}" context_high_ratio 0.65)"
-    read -r warn high <<<"$(LC_ALL=C awk -v w="$window" -v wr="$warn_ratio" -v hr="$high_ratio" \
-        -v wc="$warn" -v hc="$high" 'BEGIN {
-          a = int(wr * w); if (a > wc + 0) a = wc
-          b = int(hr * w); if (b > hc + 0) b = hc
-          printf "%.0f %.0f\n", a, b }')"
-  fi
-  warn_high="$(mentor_context_threshold "$repo_root" "${MENTOR_CONTEXT_WARN_HIGH_TOKENS:-}" context_warn_high_tokens $(( high * 9 / 10 )))"
-  if [ "$warn_high" -gt "$high" ]; then warn_high="$high"; fi
-  if [ "$warn" -gt "$warn_high" ]; then warn="$warn_high"; fi
-  if [ "$window" -gt 0 ]; then rearm=$(( window / 10 )); else rearm=$(( warn / 4 )); fi
-  if [ "$rearm" -lt 1 ]; then rearm=1; fi
-  echo "${warn} ${warn_high} ${high} ${rearm} ${window}"
-  return 0
-}
-
-# mentor_context_size <tokens> <window> — echo "~<tokens> tokens", plus
-# " (<r>% of window)" when the window is known (non-zero). The size wording both
-# context hooks print.
-mentor_context_size() {
-  local tokens="${1:-0}" window="${2:-0}"
-  if [ "$window" -gt 0 ] 2>/dev/null; then
-    echo "~${tokens} tokens ($(( tokens * 100 / window ))% of window)"
-  else
-    echo "~${tokens} tokens"
-  fi
-  return 0
-}
-
-# mentor_context_progress_note — echo the progress-first sentence every gate and
-# checkpoint tier carries: the plan, not the compaction summary, is what survives a
-# compaction intact.
-mentor_context_progress_note() {
-  echo "Before compacting, record your progress in the plan: finished steps, what's in flight, findings, the exact next action. The summary is lossy; the plan is not."
-  return 0
-}
-
-# mentor_context_gate_state <repo_root> — echo "off" when the gate is disabled via env
-# MENTOR_CONTEXT_GATE (off|0|false|no) or config context_gate == "off"; else "on".
-mentor_context_gate_state() {
-  local repo_root="${1:-}" cfg
-  case "${MENTOR_CONTEXT_GATE:-}" in
-    off|0|false|no) echo "off"; return 0 ;;
-  esac
-  cfg="$(mentor_config_get "$repo_root" "context_gate")"
-  if [ "$cfg" = "off" ]; then echo "off"; return 0; fi
-  echo "on"
-  return 0
-}
-
-# mentor_find_transcript [cwd] — echo this session's main transcript (.jsonl), or empty
-# when it cannot be located. Hooks invoked as plain Bash calls get no hook stdin, so
-# they locate it themselves. Primary (exact, race-free): CLAUDE_CODE_SESSION_ID is
-# exported into Bash tool environments and equals the transcript filename. Fallback
-# (older Claude Code): the newest transcript in the hashed project dir.
-mentor_find_transcript() {
-  local cwd="${1:-$PWD}" projects_dir tx="" base hash
-  projects_dir="${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects"
-  if [ -n "${CLAUDE_CODE_SESSION_ID:-}" ]; then
-    tx="$(find "$projects_dir" -maxdepth 2 -name "${CLAUDE_CODE_SESSION_ID}.jsonl" 2>/dev/null | head -1 || true)"
-  fi
-  if [ -z "$tx" ]; then
-    for base in "$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null || true)" "$cwd"; do
-      [ -n "$base" ] || continue
-      hash="$(printf '%s' "$base" | sed 's/[^A-Za-z0-9]/-/g')"
-      tx="$(ls -t "${projects_dir}/${hash}"/*.jsonl 2>/dev/null | head -1 || true)"
-      [ -n "$tx" ] && break
-    done
-  fi
-  echo "$tx"
-  return 0
-}
-
-# mentor_context_verdict <repo_root> [cwd] — echo "<OK|WARN|HIGH> <tokens> <warn_at>
-# <ask_at>", or empty when the gate is off or the context is unmeasurable (no transcript
-# / no jq / no usage record in the tail window).
-#
-# The single implementation of the context reading shared by begin-plan.sh at arm time
-# and by plan-state.sh `context` / `verify` — hooks/context-gate.sh passes every
-# slash-prefixed prompt, so a slash command that starts an implementation would
-# otherwise get no reading at all.
-#
-# Warn-only (v4.2.0): every level is advisory and every caller proceeds. HIGH is the
-# level at or over the limit (mentor_context_limits' high: the context_block_tokens cap,
-# or 65% of a known window when lower; it replaced the retired ASK/HANDOFF pair). A
-# caller must never be stricter than the gate, which only warns.
-mentor_context_verdict() {
-  local repo_root="${1:-}" cwd="${2:-$PWD}" tx tokens ask_at warn_at _wh _ra _win
-  [ "$(mentor_context_gate_state "$repo_root")" = "on" ] || { echo ""; return 0; }
-  tx="$(mentor_find_transcript "$cwd")"
-  tokens="$(mentor_context_tokens "$tx")"
-  if [ -z "$tokens" ]; then echo ""; return 0; fi
-  read -r warn_at _wh ask_at _ra _win <<<"$(mentor_context_limits "$repo_root" "${CLAUDE_CODE_SESSION_ID:-}")"
-  if [ "$tokens" -ge "$ask_at" ]; then
-    echo "HIGH ${tokens} ${warn_at} ${ask_at}"
-  elif [ "$tokens" -ge "$warn_at" ]; then
-    echo "WARN ${tokens} ${warn_at} ${ask_at}"
-  else
-    echo "OK ${tokens} ${warn_at} ${ask_at}"
-  fi
   return 0
 }
 

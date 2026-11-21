@@ -77,28 +77,6 @@ marker="$(mentor_plan_marker "$plans_dir" "$wt_id")"
 legacy_marker="$(mentor_plan_marker "$plans_dir" "")"
 toplevel="$(git -C "$(pwd)" rev-parse --show-toplevel 2>/dev/null || true)"
 
-# --- context gate (plan start) ---------------------------------------------
-# begin-plan gets no hook stdin, so mentor_context_verdict locates the session
-# transcript itself and measures it. Warn-only (v4.2.0): a large context never stops
-# the gate from arming — it prints a CONTEXT: line the plan skill surfaces to the user.
-# The UserPromptSubmit gate never sees /mentor:plan (slash passthrough), so we check
-# here. The same helper backs `plan-state.sh context`, so both entry points apply one
-# policy.
-# Fail-soft: unmeasurable → empty verdict → skip silently (like the not-a-repo grace).
-context_warn=""
-verdict="$(mentor_context_verdict "$repo_root" "$(pwd)")"
-if [ -n "$verdict" ]; then
-  read -r level tokens warn_at ask_at <<<"$verdict"
-  case "$level" in
-    HIGH)
-      context_warn="CONTEXT: HIGH (~${tokens} tokens ≥ ${ask_at}) — over the limit: surface to the user and keep the plan lean; do not propose a preview."
-      ;;
-    WARN)
-      context_warn="CONTEXT: WARN (~${tokens} tokens ≥ ${warn_at}) — surface to the user."
-      ;;
-  esac
-fi
-
 # --- already-approved short-circuit -----------------------------------------
 # See the header: an approved/in-progress plan owned here (or unowned) needs no
 # gate — arming would block the implementation it is already cleared for.
@@ -122,7 +100,6 @@ if [ -n "$target_slug" ] && [ -d "${plans_dir}/${target_slug}" ]; then
         [ "$(mentor_plan_effective_state "$target_dir")" = implemented ] &&
           msg="${msg} — run in progress (all steps ticked): resume at After Proceed step 6."
         echo "$msg"
-        [ -n "$context_warn" ] && echo "$context_warn"
         exit 0
         ;;
     esac
@@ -315,7 +292,5 @@ while IFS= read -r lm; do
     echo "  WARNING: slug '${target_slug}' is owned by worktree ${target_owner}, whose marker .planning.${s_suffix} is live — two worktrees may be drafting the same slug concurrently."
   fi
 done < <(mentor_live_markers "$plans_dir")
-
-[ -n "$context_warn" ] && echo "$context_warn"
 
 exit 0

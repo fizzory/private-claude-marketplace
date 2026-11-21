@@ -24,7 +24,7 @@ workflows = {workflow["name"]: workflow for workflow in capabilities["workflows"
 tracking = workflows["planning"]["fallback"]
 for declaration in (
     "Claude-only hooks:",
-    "per-prompt plan pointer (context-gate.sh)",
+    "per-prompt plan pointer (prompt-advisories.sh)",
     "SessionStart re-attachment (plan-reattach.sh)",
     "automatic hook-recorded plan_sha256 hashes on Write/Edit (plan-open.sh)",
     "plan-state.sh record-write <slug>",
@@ -41,6 +41,10 @@ reattach = hooks["SessionStart"][0]
 assert "matcher" not in reattach  # Includes clear/fork as well as startup/resume/compact.
 assert reattach["hooks"][0]["command"] == 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/plan-reattach.sh"'
 assert (root / "hooks" / "plan-reattach.sh").is_file()
+assert len(hooks["UserPromptSubmit"]) == 1
+prompt_hook = hooks["UserPromptSubmit"][0]["hooks"][0]["command"]
+assert prompt_hook == 'bash "${CLAUDE_PLUGIN_ROOT}/hooks/prompt-advisories.sh"', prompt_hook
+assert (root / "hooks" / "prompt-advisories.sh").is_file()
 
 skills = sorted((root / "skills").glob("*/SKILL.md"))
 assert len(skills) == 7, len(skills)

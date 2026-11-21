@@ -45,8 +45,6 @@ Do these in order:
      waited out or removed by hand only with the user's explicit OK. Never delete a
      marker yourself.
    - **`also armed elsewhere:`** lines are informational — don't re-run, don't wait.
-   - **`CONTEXT:`** lines: mention them to the user and continue — the context gate
-     only warns.
    - **`ALREADY APPROVED: <slug>`** is not an error: that plan is already approved (or
      in progress) and this worktree may build it, so nothing was armed. Invoke
      `Skill({"skill": "mentor:planning"})` and go straight to its "After Proceed —

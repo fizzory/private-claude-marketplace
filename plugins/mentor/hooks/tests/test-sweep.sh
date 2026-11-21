@@ -58,8 +58,7 @@ skip() { printf "  skip %s\n" "$1"; }
 has()   { printf '%s\n' "$2" | grep -qF -- "$1"; }
 hasnt() { ! printf '%s\n' "$2" | grep -qF -- "$1"; }
 
-_env() { env -u MENTOR_CONTEXT_GATE -u MENTOR_CONTEXT_BLOCK_TOKENS -u MENTOR_CONTEXT_WARN_TOKENS \
-              -u CLAUDE_CODE_SESSION_ID HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" "$@"; }
+_env() { env -u CLAUDE_CODE_SESSION_ID HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" "$@"; }
 
 # run <dir> <sweep args…> — sets OUT (stdout+stderr) and RC. Deliberately not `local`:
 # every assertion below reads them back after the call.

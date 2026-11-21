@@ -215,8 +215,8 @@ The first verification of this skill found these, each now a rule in `SKILL.md` 
 - **V-5. A no-change re-run re-asked the first question.** A second run on an unchanged plan restarted the
   question loop. A run that rebuilds nothing now reports the open count and waits to be asked.
 - **V-6. The main thread ran out of room before any worker.** Tracing a six-surface plan (CLI, chat, MCP, API,
-  email, push) by grep and read in the main thread took its context from about 71k to 174k tokens and tripped
-  mentor's context checkpoint before a single worker ran. A full-stack plan in another run reached about 532k.
+  email, push) by grep and read in the main thread took its context from about 71k to 174k tokens before a
+  single worker ran. A full-stack plan in another run reached about 532k.
   Tracing now goes to one read-only worker that returns `file:symbol` chains; one worker, because the chains
   and the ids that follow them need one author.
 - **V-7. No helper path, so no workers.** In two of five headless runs neither `PLUGIN_ROOT` nor

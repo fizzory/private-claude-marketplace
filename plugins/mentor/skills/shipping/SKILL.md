@@ -29,7 +29,9 @@ replaced by the bullet here:
   - **Step 2 dirty tree:** a dirty path the plan's steps account for is committed with
     the step's message; a path the run cannot attribute is always-pause — stop and ask.
   - **Step 3 out-of-scope files** from simplify: include in-scope only, log the rest as
-    a `review?: needed` row. Never "include all" without a human.
+    a `review?: needed` row. Never "include all" without a human. This pass runs even
+    when the software-change playbook's **Cleanup before the last grade** run rule
+    already ran one.
   - **Step 4 tests:** no question. Run the plan's Definition of done commands (the
     playbook's overlay, the constitution, or the Step 4 ladder), or apply
     `planning/references/verifier-contract.md` → **Evidence reuse**, rechecking

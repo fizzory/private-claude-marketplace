@@ -112,5 +112,5 @@ a feature-flag flip, a config or secret change, or a deploy: numbered **Before m
   pass's row. Note `git status --porcelain --untracked-files=all` before the pass.
   After it, restore or delete each path the pass changed or created that the
   plan's steps don't account for and that was clean before the pass; if such a path was
-  already dirty, leave it and log a `review?: needed` row. Log the pass itself as one
-  decision-log row.
+  already dirty, or a path the plan keeps imports or references it, leave it and log a
+  `review?: needed` row. Log the pass itself as one decision-log row.

@@ -602,9 +602,9 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
 
-## Changes in v7.0.1
+## Changes in v7.1.0
 
-Compatibility decision: **non-breaking: one software-change Run rule; no workflow-state change**.
+Compatibility decision: **non-breaking minor: one software-change Run rule; no workflow-state change**.
 
 - A software-change plan run now runs `/simplify` once, in the main thread, before the
   last step's first grade, so that grade sees the cleaned-up tree (skipped with hillclimb).

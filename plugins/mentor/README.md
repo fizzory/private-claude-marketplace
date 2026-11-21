@@ -162,7 +162,7 @@ resolve in both inline and next-line `## Playbook` formats without rewriting old
 
 | Reference | What it supplies |
 |---|---|
-| [software-change](skills/planning/references/playbooks/software-change.md) | **The software playbook**, loaded by `planning` at runtime when the goal is a code change. Supplies five overlays the general flow reads: research directives (callers, tests, check commands), the Definition of done (the repo's checks pass), extra always-pause items (force-push, protected branches, merging, destructive migrations), the deliver mode (`shipping` then `merging`), and evidence kinds (test output, CI link, diff stat). Never a workflow of its own. |
+| [software-change](skills/planning/references/playbooks/software-change.md) | **The software playbook**, loaded by `planning` at runtime when the goal is a code change. Supplies five overlays the general flow reads: research directives (callers, tests, check commands), the Definition of done (the repo's checks pass), extra always-pause items (force-push, protected branches, merging, destructive migrations), the deliver mode (`shipping` then `merging`), and evidence kinds (test output, CI link, diff stat), plus one Run rule (`/simplify` before the last step's grade). Never a workflow of its own. |
 | [retrospective](skills/planning/references/playbooks/retrospective.md) | Rebuild one finished session from disk as an evidence graph, run three lenses and a synthesizer, apply accepted skill changes, open one confirmed PR/MR per repository, and report kept-local changes and remaining proposals. No plan approval; human-only merge; never co-loaded with software-change. Host transcript details live in the adapters. |
 | [investigation](skills/planning/references/playbooks/investigation.md) | Produce a read-only cited answer. Label claims measured, inferred or guess; write only the plan's evidence and deliverable, and ship nothing. |
 | [hillclimb](skills/planning/references/playbooks/hillclimb.md) | Improve a named metric through one change → one measurement → keep or revert. Done requires the target AND at least N logged attempts within approved caps; software-change owns delivery when combined. |
@@ -601,6 +601,15 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_OPENER` | `auto` (default) · `vscode` · `chrome` · `system` |
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
+
+## Changes in v7.1.0
+
+Compatibility decision: **non-breaking minor: one software-change Run rule; no workflow-state change**.
+
+- A software-change plan run now runs `/simplify` once, in the main thread, before the
+  last step's first grade, so that grade sees the cleaned-up tree (skipped with hillclimb).
+  Shipping's own Step 3 pass still runs.
+- The adapter READMEs say every playbook supplies optional Run rules.
 
 ## Changes in v7.0.0
 

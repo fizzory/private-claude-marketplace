@@ -1,7 +1,7 @@
 {
   "name": "mentor",
   "description": "Plan-first agent workflow: approve a plan once, then mentor runs it to a verified done-check, pausing only for always-pause actions and logging every decision for review. Requested retros run without plan approval and open one PR/MR per repo for human review and merge.",
-  "version": "7.0.0",
+  "version": "7.1.0",
   "author": {
     "name": "NTBX"
   },

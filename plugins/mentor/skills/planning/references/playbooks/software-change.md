@@ -1,8 +1,8 @@
 Overlay a mentor plan run loads when the requested goal is a change to a repository's
 code, tests, config, dependencies or CI, such as a bug fix or feature. It supplies
-research, checks, always-pause items, delivery and evidence; it never plans or
-approves independently. Use the retrospective playbook for lessons from a finished
-session, and shipping or merging directly for a standalone delivery request.
+research, checks, always-pause items, delivery, evidence and run rules; it never
+plans or approves independently. Use the retrospective playbook for lessons from a
+finished session, and shipping or merging directly for a standalone delivery request.
 
 # Playbook — software change
 
@@ -13,9 +13,9 @@ Use a structured question UI when the host offers one; otherwise ask the same fo
 Mentor's main workflow (`planning`) is general-purpose and never names git, tests,
 CI, or pull requests. This playbook is where those live. Planning loads it when the
 goal is a code change, records `## Playbook: software-change` plus a
-decision-log row, and reads the five overlays below at the points it names. Nothing
-here replaces a planning rule; each overlay only fills a slot the general flow leaves
-open.
+decision-log row, and reads the five overlays and the Run rules below at the points
+they name. Nothing here replaces a planning rule; each overlay only fills a slot the
+general flow leaves open.
 
 ## 1. Research directives (planning Step 2)
 
@@ -101,3 +101,16 @@ The **runbook** part of the Done review is required when the change ships a migr
 a feature-flag flip, a config or secret change, or a deploy: numbered **Before merge**,
 **Merge**, **After merge**, and **Rollback** steps. Otherwise it reads
 `Runbook: n/a, merge is self-contained`.
+
+## 6. Run rules (After Proceed)
+
+- **Cleanup before the last grade**: once per run, when the last implementation step
+  looks done and before its first grade is dispatched, run `/simplify` in the main
+  thread, never inside a delegated brief, so that step's verifier grades the cleaned-up
+  tree. Skip it when hillclimb is also selected. If `/simplify` is unavailable, do
+  shipping Step 3's solo review of the working-tree diff instead and note that in the
+  pass's row. Note `git status --porcelain --untracked-files=all` before the pass.
+  After it, restore or delete each path the pass changed or created that the
+  plan's steps don't account for and that was clean before the pass; if such a path was
+  already dirty, or a path the plan keeps imports or references it, leave it and log a
+  `review?: needed` row. Log the pass itself as one decision-log row.

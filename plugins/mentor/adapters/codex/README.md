@@ -44,8 +44,8 @@ and the references matching the requested plan deliverable:
 [investigation](../../skills/planning/references/playbooks/investigation.md),
 [hillclimb](../../skills/planning/references/playbooks/hillclimb.md) and
 [prototype](../../skills/planning/references/playbooks/prototype.md).
-Each fills the five required overlay slots; investigation, hillclimb and prototype
-also supply optional Run rules. Each keeps its own Host portability fallback.
+Each fills the five required overlay slots and also supplies optional Run rules.
+Each keeps its own Host portability fallback.
 These are references within planning; Mentor still exposes
 seven public skills and needs no slash-command facade or hooks to read them. Use
 available read-only research, measurement and observation tools, with serial work

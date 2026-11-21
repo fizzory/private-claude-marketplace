@@ -88,11 +88,6 @@
 #
 #       A fixed ~3 subprocesses scan every sidecar and plan.md regardless of plan count.
 #
-#   context
-#       CONTEXT: HIGH|WARN|OK|UNKNOWN (~N tokens) — advisory only, every level proceeds.
-#       context-gate.sh passes every slash-prefixed prompt, so a slash command that
-#       starts an implementation would otherwise get no reading.
-#
 #   dir [--plans]
 #       The repo-scoped mentor dir (<repo_root>/.mentor via git-common-dir, so linked
 #       worktrees share one; mentor_no_repo_state_dir outside a repo) — one path on
@@ -221,10 +216,10 @@ Usage: plan-state.sh <subcommand>
   verify <slug>                         plan.md structural checks (fence balance, table pipe-count,
                                          step bodies each carrying a Done when:, a draft plan's
                                          ## Goal check + ## Decision log, Rev-note order,
-                                         stray ✅ / ### inside the steps section) + a folded CONTEXT
-                                         read, as CHECK: lines; exit 1 iff a GATING check fails
-                                         (Rev-order, context, stray ✅, ### and untraced steps
-                                         in a stored draft are informational)
+                                         stray ✅ / ### inside the steps section), as CHECK: lines;
+                                         exit 1 iff a GATING check fails (Rev-order, stray ✅,
+                                         ### and untraced steps in a stored draft are
+                                         informational)
   list [--group G] [--owners]           every plan with its effective state (--owners adds OWNER)
   current [--any]                       the current plan, owned-by-this-worktree scoped (group-aware);
                                          --any for a deliberate repo-wide read
@@ -247,7 +242,6 @@ Usage: plan-state.sh <subcommand>
                                          (default); repo = the whole worktree minus .git/.
                                          find walks so grep never applies .gitignore —
                                          gitignored .mentor/ IS reached
-  context                               CONTEXT: HIGH|WARN|OK|UNKNOWN (~N tokens)
   dir [--plans]                         the repo-scoped mentor dir (or its plans dir)
   gate [--verbose]                      ARMED|STALE|ARMED_ELSEWHERE|RELEASED — read-only marker
                                          status for THIS worktree (--verbose adds per-token fields;
@@ -262,32 +256,6 @@ EOF
 
 sub="${1:-}"
 [ "$#" -gt 0 ] && shift
-
-# --- context: the only subcommand that needs neither a repo nor a plans dir ---
-if [ "$sub" = "context" ]; then
-  ctx_repo="$(mentor_repo_root "$(pwd)")"
-  verdict="$(mentor_context_verdict "$ctx_repo" "$(pwd)")"
-  if [ -z "$verdict" ]; then
-    echo "CONTEXT: UNKNOWN (not measurable — gate off, or no transcript/jq). Proceed."
-    exit 0
-  fi
-  read -r level tokens warn_at ask_at <<<"$verdict"
-  case "$level" in
-    HIGH)
-      echo "CONTEXT: HIGH (~${tokens} tokens ≥ ${ask_at})"
-      echo "[mentor] Over the limit — surface this to the user, then proceed. Keep the"
-      echo "work in this session small and lean."
-      ;;
-    WARN)
-      echo "CONTEXT: WARN (~${tokens} tokens ≥ ${warn_at})"
-      echo "[mentor] Session is getting large — surface this to the user, then proceed."
-      ;;
-    *)
-      echo "CONTEXT: OK (~${tokens} tokens)"
-      ;;
-  esac
-  exit 0
-fi
 
 # --- dir: pure path derivation — needs neither a repo (fallback) nor a plans dir ---
 if [ "$sub" = "dir" ]; then
@@ -537,7 +505,7 @@ if [ "$sub" = "gate" ]; then
 fi
 
 # --- sweep <pattern> [--roots plans|repo] [--ignore-case]: the ONE portable search
-# over mentor's own state. Deliberately an EARLY handler, alongside gate/dir/context:
+# over mentor's own state. Deliberately an EARLY handler, alongside gate/dir:
 # it must run BEFORE the repo-root and plans-dir guards below, because a repo with no
 # .mentor/plans yet is still a perfectly good `repo` sweep, and a missing plans dir
 # must report NOTHING-SEARCHED rather than the plans-dir guard's "nothing planned" —
@@ -663,7 +631,7 @@ if [ "$sub" = "start" ]; then
   exit 0
 fi
 
-# Every subcommand handled by an early `if` above (context, dir, ensure-dir, relocate,
+# Every subcommand handled by an early `if` above (dir, ensure-dir, relocate,
 # gate, sweep, start) exits before reaching here, so none of them appears in this
 # allow-list — adding one would be unreachable code, not a fix.
 case "$sub" in
@@ -1423,11 +1391,7 @@ case "$sub" in
   # both documented below, plus untraced steps in a stored draft):
   # Rev-note order (the plugin's content spec does not mandate a Rev-note changelog
   # at all, so flagging its ABSENCE would be a false-positive machine; when Rev
-  # lines DO exist this only reports a non-monotonic sequence, it never blocks) and
-  # the CONTEXT verdict (folds planning/SKILL.md's separately-mandated pre-ask
-  # context re-check into the one command the agent already calls reliably, rather
-  # than a second command observed skipped before half this session's asks; the
-  # calling skill still decides how to surface HIGH/WARN via `context` itself).
+  # lines DO exist this only reports a non-monotonic sequence, it never blocks).
   verify)
     slug="${1:-}"; [ "$#" -gt 0 ] && shift
     if [ "$#" -gt 0 ]; then
@@ -1569,15 +1533,6 @@ case "$sub" in
       else
         echo "CHECK: Rev-note order NOT monotonic (${v_seq_str}) — changelog may be hard to scan (informational only)"
       fi
-    fi
-
-    v_ctx_repo="$(mentor_repo_root "$(pwd)")"
-    v_verdict="$(mentor_context_verdict "$v_ctx_repo" "$(pwd)")"
-    if [ -n "$v_verdict" ]; then
-      read -r v_ctx_level v_ctx_tokens v_ctx_rest <<<"$v_verdict"
-      echo "CHECK: context ${v_ctx_level} (~${v_ctx_tokens} tokens)"
-    else
-      echo "CHECK: context UNKNOWN (not measurable — gate off, or no transcript/jq)"
     fi
 
     [ "$v_fail" -eq 0 ] && exit 0

@@ -86,16 +86,6 @@ slash command — and state that no host-level edit gate is active. Do not run
 (Why a genuine Claude gate must be observed when present: `references/rationale.md`
 → **Step 0 — the armed-gate check**.)
 
-When the Claude facade ran, `begin-plan.sh` may have printed a **`CONTEXT:`** line (the context gate):
-
-- **`CONTEXT: WARN`** — the session is getting large. Surface it to the user. Nothing
-  about *how* you plan changes.
-- **`CONTEXT: HIGH`** — over the limit. Everything WARN does, plus: do not propose a
-  review page (Step 5) yourself — an explicit user ask is still honored. "Keep the plan
-  lean" means exactly that omission: Step 4's content spec never shrinks.
-
-The context gate only warns.
-
 **An already-approved plan goes straight to implementation.** When the facade printed
 **`ALREADY APPROVED: <slug>`** (`begin-plan.sh` saw that slug `approved` or
 `in_progress`, owned by this worktree or unowned, and did not arm) — or, on direct or
@@ -561,10 +551,7 @@ call**). A non-zero exit
 names the failing check on its own `CHECK:` line — read that line rather than
 guessing which one broke, since a step missing its `Done when:` is also what a
 body truncated by a mis-parsed step line looks like. Every other `CHECK:` line
-it prints is informational and never fails the call, `CHECK: context` included;
-that one is the same reading "Re-check context" below asks for, so if nothing
-else ran between this call and the approval ask, that reading already
-satisfies it — no second `context` call needed.
+it prints is informational and never fails the call.
 Only a plan whose stored state is `draft` gets `CHECK: untraced step N` when a
 step's `Goal:` lacks `serves S`; this is informational, and released plans skip it.
 
@@ -795,26 +782,6 @@ consent. Re-send the pointer card and re-ask.
 
 If the user types **"show plan" in Other**, print the full body once, then ask the same
 approval question again. Printing approves nothing; do not run `approve-plan.sh` for it.
-
-### Re-check context
-
-Decide this **before** asking too. Step 0's `CONTEXT:` line is a snapshot from
-before research and decision-resolution ran — precisely the
-steps that grow a session — so a plan that armed clean can still reach this
-question well past the WARN/HIGH thresholds with nothing in this skill
-having said so. Run this immediately before composing the question:
-
-```bash
-bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" context
-```
-
-- **`CONTEXT: WARN`** or **`CONTEXT: HIGH`** — name the size in the question text
-  ("this session is getting large" / "this session is over the context limit"), even if
-  Step 0 printed a lower tier or nothing at all. The option rows do not change.
-- **`CONTEXT: OK` / `UNKNOWN`** — nothing to add.
-
-If "Verify the write" just ran with nothing in between, its `CHECK: context` line
-already is this reading.
 
 ### The option set
 

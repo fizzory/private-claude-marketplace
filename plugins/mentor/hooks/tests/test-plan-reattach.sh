@@ -216,7 +216,7 @@ selection() { # <case> <expected-slug-or-empty> [stored-state=draft]
     expected='mentor plan: no plan file yet · it is created at research start (planning Step 2)'
   fi
   pointer="$(jq -nc --arg cwd "$REPO" --arg sid "$SID" '{cwd:$cwd,session_id:$sid,prompt:"hello"}' \
-    | env MENTOR_PLANNING_INTENT=off MENTOR_CONTEXT_GATE=off bash "$HOOKS/context-gate.sh")"
+    | env MENTOR_PLANNING_INTENT=off bash "$HOOKS/prompt-advisories.sh")"
   chk "$label → prompt agrees with SessionStart selector" has "$expected" "$pointer"
 }
 reset_selection

@@ -77,18 +77,6 @@ If there is genuinely nothing to grill, say so in one line and stop.
 
 ## Step 2 — The interview protocol
 
-**Check the context before committing to the interview.** An interview runs on `AskUserQuestion` round-trips and codebase reads, neither of which `context-gate.sh`'s WARN tier fires on — so this reading, not the gate, is what tells the user how large the session already is:
-
-```bash
-bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" context
-```
-
-- **`CONTEXT: HIGH`** — over the limit; surface it, then continue and keep the interview tight.
-- **`CONTEXT: WARN`** — surface it, then continue.
-- **`CONTEXT: OK` / `UNKNOWN`** — continue.
-
-Re-run the same check at Step 3's Close, before the recap.
-
 Interview the user relentlessly about every aspect of this plan until you reach a shared understanding. Walk down each branch of the design tree, resolving dependencies between decisions one-by-one. For each question, provide your **recommended answer** — the most practical and clean solution, never trade maintainability or reliability for implementation speed.
 
 - **Ask the questions one at a time**, waiting for feedback on each question before continuing. Asking multiple questions at once is bewildering — favor `AskUserQuestion` with a single focused question (your recommended option first).
@@ -107,16 +95,10 @@ Interview the user relentlessly about every aspect of this plan until you reach 
 
 When you reach shared understanding:
 
-1. Re-run the context check before the recap:
-   ```bash
-   bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" context
-   ```
-   `CONTEXT: WARN`/`HIGH` surfaces the same way Step 2's pre-interview check does — a
-   warning in the recap, never a reason to skip or reroute the close.
-2. Summarize the **resolved decisions** and any **deferred / open items** in a short recap.
-3. If a mentor plan was the subject, **surface the deltas** between the plan and what you just resolved, and tell the user to fold them in by re-running the plan flow (`/mentor:plan`) or, if mid-plan, re-asking the proceed gate. **Do not edit the plan file yourself** if this worktree's gate is armed — surface the changes and let the plan flow re-render them. A second hazard the gate does **not** cover: a plan whose sidecar `owner` is a *different* worktree (read the same sidecar's `owner` field the way you already read its `note` above — `jq -r .owner` on that path) — no gate blocks editing that file, since the plan-gate deny is scoped to the owning worktree's writes, not to the file itself, and this worktree may be wide open while that plan is someone else's live draft. Treat a foreign-owned plan the same as an armed gate: surface the deltas, don't edit.
-4. Point to the natural next step: `/mentor:plan` (to author/refresh the plan) or, if a locked plan now looks solid, return to its approve gate.
-5. Never implement from here, even a one-line change: the grill feeds a plan, and the plan's one approval is what starts work. A trivial change still goes through `/mentor:plan`, whose research and approval cost little on a small task and whose verifier is what proves it.
+1. Summarize the **resolved decisions** and any **deferred / open items** in a short recap.
+2. If a mentor plan was the subject, **surface the deltas** between the plan and what you just resolved, and tell the user to fold them in by re-running the plan flow (`/mentor:plan`) or, if mid-plan, re-asking the proceed gate. **Do not edit the plan file yourself** if this worktree's gate is armed — surface the changes and let the plan flow re-render them. A second hazard the gate does **not** cover: a plan whose sidecar `owner` is a *different* worktree (read the same sidecar's `owner` field the way you already read its `note` above — `jq -r .owner` on that path) — no gate blocks editing that file, since the plan-gate deny is scoped to the owning worktree's writes, not to the file itself, and this worktree may be wide open while that plan is someone else's live draft. Treat a foreign-owned plan the same as an armed gate: surface the deltas, don't edit.
+3. Point to the natural next step: `/mentor:plan` (to author/refresh the plan) or, if a locked plan now looks solid, return to its approve gate.
+4. Never implement from here, even a one-line change: the grill feeds a plan, and the plan's one approval is what starts work. A trivial change still goes through `/mentor:plan`, whose research and approval cost little on a small task and whose verifier is what proves it.
 
 ## Done when
 
@@ -126,7 +108,6 @@ When you reach shared understanding:
 - Codebase-answerable questions were answered by targeted codebase reads, not by asking the user or by bulk-reading.
 - A declined question or an interview cut short still left resolved decisions recoverable — recapped in the closing message, not silently lost.
 - Step 1's related-plans check (`plan-state.sh list`) ran before the interview started, whichever branch resolved the subject.
-- The context check (`plan-state.sh context`) ran before the interview started and again before the Close recap.
 - A free-typed accept/defer instruction closed its decision(s) on the spot — every covered decision named, none re-asked for confirmation.
 - Every question that reached the user was a product or preference call; evidence- and constitution-settleable ones were settled without asking and named in the recap.
 

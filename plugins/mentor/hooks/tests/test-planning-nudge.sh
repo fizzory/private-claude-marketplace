@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # test-planning-nudge.sh — regression tests for the PLANNING-INTENT NUDGE, which since
-# v2.34.0 lives as tier 2 of context-gate.sh (the standalone planning-intent.sh hook was
-# retired into it). The context warning half is pinned off via MENTOR_CONTEXT_GATE=off
-# so this suite measures the nudge independently; live-gate cases also retain the
-# per-prompt plan pointer.
+# v2.34.0 lives in the one per-prompt hook, prompt-advisories.sh (the standalone
+# planning-intent.sh hook was retired into it). Live-gate cases also retain the
+# per-prompt plan pointer; test-prompt-advisories.sh covers that pointer itself.
 #
 # Drives the hook with UserPromptSubmit JSON under an isolated $HOME (so the
 # once-per-session marker never touches the real machine state) and a real scratch git
@@ -16,7 +15,7 @@
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-HOOK="$(dirname "$SCRIPT_DIR")/context-gate.sh"   # tier 2 lives here since v2.34.0
+HOOK="$(dirname "$SCRIPT_DIR")/prompt-advisories.sh"
 LIB="$(dirname "$SCRIPT_DIR")/lib/state.sh"
 [ -f "$HOOK" ] || { echo "FATAL: hook not found at $HOOK" >&2; exit 1; }
 [ -f "$LIB" ]  || { echo "FATAL: lib not found at $LIB" >&2; exit 1; }
@@ -51,7 +50,7 @@ mkjson() { python3 -c 'import json,sys;print(json.dumps({"prompt":sys.argv[1],"c
 run() {
   local prompt="$1" cwd="$2" sid="$3"; shift 3
   printf '%s' "$(mkjson "$prompt" "$cwd" "$sid")" \
-    | env -i HOME="$FAKE_HOME" PATH="$PATH" MENTOR_CONTEXT_GATE=off "$@" bash "$HOOK" 2>/dev/null
+    | env -i HOME="$FAKE_HOME" PATH="$PATH" "$@" bash "$HOOK" 2>/dev/null
 }
 check_fires() { # desc prompt cwd session_id [env=val ...]
   local desc="$1" prompt="$2" cwd="$3" sid="$4"; shift 4

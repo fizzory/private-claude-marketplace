@@ -62,4 +62,4 @@ Apply when: Large outputs, long files, repeated reads, or delegation threaten co
 Bound each phase, keep bulk evidence in durable artifacts, and carry concise findings
 and citations into the main thread; delegate bulk reading only when available and useful.
 Why: Keeping the active context small preserves the evidence and decisions needed for the next step.
-Home: [Context check](../SKILL.md#re-check-context) and [role briefs](../SKILL.md#decision-maker).
+Home: [Role briefs](../SKILL.md#decision-maker).

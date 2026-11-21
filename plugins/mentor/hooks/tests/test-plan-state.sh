@@ -23,7 +23,7 @@
 #     the retired subcommands and flags are usage errors, never silent no-ops.
 #
 # Runs against a SANDBOX $HOME and CLAUDE_CONFIG_DIR so it never touches real user
-# state and never finds a real session transcript.
+# state.
 set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -35,7 +35,7 @@ command -v jq >/dev/null 2>&1 || { echo "FATAL: jq required to run this suite" >
 . "$HOOKS/lib/state.sh"   # only for mentor_worktree_id, to derive wt-ids the same way begin-plan.sh does
 
 ROOT="$(cd "$(mktemp -d)" && pwd -P)"
-SANDBOX="$ROOT/home"; mkdir -p "$SANDBOX/.claude/projects/proj"
+SANDBOX="$ROOT/home"; mkdir -p "$SANDBOX/.claude"
 REPO="$ROOT/sample-repo"
 git init -q -b main "$REPO" >/dev/null 2>&1
 ( cd "$REPO"; git config user.email t@t.co; git config user.name t; echo x > f; git add -A; git commit -q -m init ) >/dev/null 2>&1
@@ -86,10 +86,9 @@ chk() { local desc="$1"; shift
 has()  { printf '%s' "$2" | grep -q -- "$1"; }
 hasnt(){ ! printf '%s' "$2" | grep -q -- "$1"; }
 
-# All runners pin HOME + CLAUDE_CONFIG_DIR into the sandbox and drop the context
-# env overrides, so a developer's own shell can never change an assertion.
-_env() { env -u MENTOR_CONTEXT_GATE -u MENTOR_CONTEXT_BLOCK_TOKENS -u MENTOR_CONTEXT_WARN_TOKENS \
-              -u CLAUDE_CODE_SESSION_ID HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" "$@"; }
+# All runners pin HOME + CLAUDE_CONFIG_DIR into the sandbox and drop the session id,
+# so a developer's own shell can never change an assertion.
+_env() { env -u CLAUDE_CODE_SESSION_ID HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" "$@"; }
 ps()    { ( cd "${CWD:-$REPO}" && _env bash "$PLANSTATE" "$@" 2>&1 ); }          # merged
 psout() { ( cd "${CWD:-$REPO}" && _env bash "$PLANSTATE" "$@" 2>/dev/null ); }   # stdout only
 pserr() { ( cd "${CWD:-$REPO}" && _env bash "$PLANSTATE" "$@" 2>&1 >/dev/null ); } # stderr only
@@ -100,8 +99,8 @@ psq_nojq_rc()  { ( cd "${CWD:-$REPO}" && _env PATH="$NOJQ_DIR" "$BASH_BIN" "$PLA
 # Same as ps(), but with an explicit CLAUDE_CODE_SESSION_ID — for the owner_session
 # stamping checks (ps()/psout() deliberately strip it via _env above).
 ps_sess() { local sess="$1"; shift
-  ( cd "${CWD:-$REPO}" && env -u MENTOR_CONTEXT_GATE -u MENTOR_CONTEXT_BLOCK_TOKENS -u MENTOR_CONTEXT_WARN_TOKENS \
-        HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" CLAUDE_CODE_SESSION_ID="$sess" bash "$PLANSTATE" "$@" 2>&1 );
+  ( cd "${CWD:-$REPO}" && env HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" \
+        CLAUDE_CODE_SESSION_ID="$sess" bash "$PLANSTATE" "$@" 2>&1 );
 }
 # Read one field straight off a plan's sidecar (deps/owner — list/current never
 # surface these, so the CLI-output assertions above can't reach them).
@@ -318,45 +317,15 @@ chk "current (scoped) → ownership-aware refusal names it"          has "owned 
 out="$(ps current --any)"; rc=$?
 chk "current --any still finds the sibling-owned plan"             has "SLUG: only-b-owned" "$out"
 
-echo "== H. context: the advisory backstop (context-gate.sh passes slash commands) =="
-mktx() { python3 - "$1" "$2" <<'PY'
-import json,sys
-open(sys.argv[1],"w").write(json.dumps(
-  {"type":"assistant","message":{"usage":{"input_tokens":10,
-   "cache_read_input_tokens":int(sys.argv[2])-10,"cache_creation_input_tokens":0}}})+"\n")
-PY
-}
-TXDIR="$SANDBOX/.claude/projects/proj"
-out="$(ps context)"; rc=$?
-chk "no transcript → exit 0"            test "$rc" = "0"
-chk "no transcript → UNKNOWN, proceed"  has "CONTEXT: UNKNOWN" "$out"
-ctx() { ( cd "$REPO" && env -u MENTOR_CONTEXT_GATE -u MENTOR_CONTEXT_BLOCK_TOKENS -u MENTOR_CONTEXT_WARN_TOKENS \
-          HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" CLAUDE_CODE_SESSION_ID=sess \
-          bash "$PLANSTATE" context 2>&1 ); }
-mktx "$TXDIR/sess.jsonl" 400000
-out="$(ctx)"; rc=$?
-chk "over ask → exit 0"                 test "$rc" = "0"
-chk "over ask → CONTEXT: HIGH"          has "CONTEXT: HIGH" "$out"
-chk "over ask → proceeds"               has "then proceed" "$out"
-# v4.2.0 warn-only: this command must NEVER refuse, ask, or steer toward a handoff —
-# being stricter than the gate itself is the bug this guards.
-chk "over ask → no handoff suggestion"  hasnt "handoff" "$out"
-chk "over ask → no bypass"              hasnt "bypass" "$out"
-chk "over ask → no dispatch refusal"    hasnt "Do NOT dispatch" "$out"
-mktx "$TXDIR/sess.jsonl" 230000
-out="$(ctx)"
-chk "over warn → CONTEXT: WARN"         has "CONTEXT: WARN" "$out"
-chk "over warn → no HIGH verdict"       hasnt "CONTEXT: HIGH" "$out"
-chk "over warn → no handoff suggestion" hasnt "handoff" "$out"
-mktx "$TXDIR/sess.jsonl" 50000
-out="$( cd "$REPO" && env -u MENTOR_CONTEXT_BLOCK_TOKENS -u MENTOR_CONTEXT_WARN_TOKENS \
-        HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" CLAUDE_CODE_SESSION_ID=sess \
-        bash "$PLANSTATE" context 2>&1 )"
-chk "under warn → CONTEXT: OK"          has "CONTEXT: OK" "$out"
-out="$( cd "$REPO" && env HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" \
-        CLAUDE_CODE_SESSION_ID=sess MENTOR_CONTEXT_GATE=off bash "$PLANSTATE" context 2>&1 )"
-chk "kill switch honored → UNKNOWN"     has "CONTEXT: UNKNOWN" "$out"
-rm -f "$TXDIR/sess.jsonl"
+echo "== H. context was removed in v7.0.0: an unknown subcommand wherever it runs =="
+# It must fall through to the usage error, never to an environment guard's fail-soft
+# exit 0 ("Not in a git repo", "No plans dir yet").
+for ctx_where in "$REPO" "$BARE" "$NONGIT"; do
+  out="$(cd "$ctx_where" && _env bash "$PLANSTATE" context 2>&1)"; rc=$?
+  chk "context in ${ctx_where##*/} → exit 1"            test "$rc" = "1"
+  chk "context in ${ctx_where##*/} → unknown subcommand" has "Unknown subcommand: context" "$out"
+  chk "context in ${ctx_where##*/} → usage printed"      has "Usage: plan-state.sh" "$out"
+done
 
 echo "== I2. dir: pure path derivation, before every guard =="
 CWD="$REPO"
@@ -384,8 +353,6 @@ chk "not in a repo → reason on stderr"  test -n "$(pserr list)"
 chk "not in a repo → nothing on stdout" test -z "$(psout list)"
 out="$(ps current)"; rc=$?
 chk "current outside a repo → exit 0"   test "$rc" = "0"
-out="$(ps context)"; rc=$?
-chk "context outside a repo → exit 0"   test "$rc" = "0"
 CWD="$BARE"
 out="$(ps list)"; rc=$?
 chk "repo with no plans dir → exit 0"   test "$rc" = "0"
@@ -653,7 +620,7 @@ tv_refused 'tick-verdict: empty canonical with legacy PASS rejected'
 tv_reset; printf 'Verdict: FAIL\n' > "$TV_DIR/step-1-verify.md"
 tv_refused 'tick-verdict: legacy FAIL rejected' "$TV_DIR/step-1-verify.md"
 
-echo "== L3. verify <slug>: plan.md structural checks + folded CONTEXT read =="
+echo "== L3. verify <slug>: plan.md structural checks =="
 # v6: a draft plan must carry ## Goal check + ## Decision log, so every structural
 # fixture below gets both appended; their absence is tested on its own in L3c.
 vplan() { plan "$@"; printf '%s\n' '' '## Goal check' '`true` exits 0' '' '## Decision log' '' >> "$PLANS/$1/plan.md"; }
@@ -666,7 +633,7 @@ chk "verify (clean plan) → exit 0"                 test "$rc" = "0"
 chk "..reports fences balanced"                     has "CHECK: fences balanced (2 markers)" "$out"
 chk "..reports tables uniform"                      has "CHECK: tables uniform" "$out"
 chk "..reports Rev-note order monotonic"            has "CHECK: Rev-note order monotonic (1,2)" "$out"
-chk "..reports a context line (informational)"      has "CHECK: context" "$out"
+chk "..prints no context CHECK line (removed v7.0.0)" hasnt "CHECK: context" "$out"
 
 vplan vf-fence '# t' '```bash' 'echo hi' '```' '```python' 'never closed'
 out="$(ps verify vf-fence)"; rc=$?

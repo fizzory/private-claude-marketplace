@@ -1,9 +1,9 @@
 # Claude Code adapter
 
 Claude Code discovers the command facades in `commands/` and the lifecycle hooks in
-`hooks/hooks.json`. Those surfaces add the enforced edit gate, context checks, the
-`plan-continue.sh` Stop hook that keeps an approved run going until a terminal state,
-plan-file tracking (the per-prompt plan pointer in `context-gate.sh`, `plan-reattach.sh`
+`hooks/hooks.json`. Those surfaces add the enforced edit gate, the planning-intent
+nudge, the `plan-continue.sh` Stop hook that keeps an approved run going until a terminal
+state, plan-file tracking (the per-prompt plan pointer in `prompt-advisories.sh`, `plan-reattach.sh`
 SessionStart re-attachment, and automatic `plan_sha256` recording on Write/Edit in
 `plan-open.sh`), verifier subagents, and hosted Artifact publishing on top
 of the portable skills and `.mentor/` state contract.

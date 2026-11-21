@@ -41,18 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/context-gate.sh\"",
-            "timeout": 5
-          }
-        ]
-      }
-    ],
-    "PostToolBatch": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/context-checkpoint.sh\"",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/prompt-advisories.sh\"",
             "timeout": 5
           }
         ]

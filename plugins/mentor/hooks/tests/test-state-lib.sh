@@ -3,8 +3,7 @@
 #
 # The lib backs every hook, so it gets its own suite: project-scoped state-dir
 # derivation (<repo>/.mentor), `set -e` caller safety (sourced functions must never
-# abort a set -e hook), the config reader, the .gitignore bootstrap, and the
-# context-gate helpers (threshold precedence, kill switch, token extraction).
+# abort a set -e hook), the config reader, and the .gitignore bootstrap.
 #
 # Runs against a SANDBOX $HOME so it never touches real user state.
 set -uo pipefail
@@ -63,8 +62,6 @@ echo "== C. set -e caller safety (functions must not abort the hook) =="
 chk "mentor_config_get on nonexistent root" \
   libsh 'm="$(mentor_config_get /nonexistent/path mode)"; [ -z "$m" ]; echo done >/dev/null'
 chk "mentor_config_get bad input"         libsh 'v="$(mentor_config_get "" "")"; [ -z "$v" ]'
-chk "mentor_context_tokens no file"       libsh 'v="$(mentor_context_tokens /nope.jsonl)"; [ -z "$v" ]'
-chk "mentor_context_gate_state no repo"   libsh 's="$(mentor_context_gate_state "")"; [ "$s" = "on" ]'
 chk "mentor_ensure_gitignore empty"       libsh 'mentor_ensure_gitignore ""; echo ok >/dev/null'
 chk "mentor_cwd on empty input"           libsh 'c="$(mentor_cwd "")"; [ -n "$c" ]'
 chk "mentor_cwd on garbage input"         libsh 'c="$(mentor_cwd "not json")"; [ -n "$c" ]'
@@ -394,30 +391,13 @@ STATE="$expect_root/.mentor"
 RCONF="$STATE/config.json"
 mkdir -p "$STATE"
 printf '{"other": 1}\n'          > "$RCONF"
-chk "absent key → empty"       test -z "$(libsh "mentor_config_get '$expect_root' context_gate")"
-printf '{"context_block_tokens": 300000, "context_gate": "off"}\n' > "$RCONF"
-chk "config_get numeric coerced to string" test "$(libsh "mentor_config_get '$expect_root' context_block_tokens")" = "300000"
-chk "config_get string value"              test "$(libsh "mentor_config_get '$expect_root' context_gate")" = "off"
+chk "absent key → empty"       test -z "$(libsh "mentor_config_get '$expect_root' planning_intent")"
+printf '{"continue_max_idle_blocks": 5, "planning_intent": "off"}\n' > "$RCONF"
+chk "config_get numeric coerced to string" test "$(libsh "mentor_config_get '$expect_root' continue_max_idle_blocks")" = "5"
+chk "config_get string value"              test "$(libsh "mentor_config_get '$expect_root' planning_intent")" = "off"
 chk "config_get missing key → empty"       test -z "$(libsh "mentor_config_get '$expect_root' nope")"
 rm -f "$RCONF"
-chk "no config file → empty"        test -z "$(libsh "mentor_config_get '$expect_root' context_gate")"
-
-echo "== E. mentor_context_threshold precedence (env > config > default) =="
-printf '{"context_block_tokens": 250000}\n' > "$RCONF"
-chk "config wins over default"  test "$(libsh "mentor_context_threshold '$expect_root' '' context_block_tokens 270000")" = "250000"
-chk "env wins over config"      test "$(libsh "mentor_context_threshold '$expect_root' 999 context_block_tokens 270000")" = "999"
-chk "non-numeric env falls through to config" test "$(libsh "mentor_context_threshold '$expect_root' abc context_block_tokens 270000")" = "250000"
-rm -f "$RCONF"
-chk "no env/config → default"   test "$(libsh "mentor_context_threshold '$expect_root' '' context_block_tokens 270000")" = "270000"
-
-echo "== F. mentor_context_gate_state kill switch =="
-chk "env off"          test "$(libsh "MENTOR_CONTEXT_GATE=off mentor_context_gate_state '$expect_root'")" = "off"
-chk "env 0"            test "$(libsh "MENTOR_CONTEXT_GATE=0 mentor_context_gate_state '$expect_root'")" = "off"
-printf '{"context_gate": "off"}\n' > "$RCONF"
-chk "config off"       test "$(libsh "mentor_context_gate_state '$expect_root'")" = "off"
-printf '{"context_gate": "on"}\n' > "$RCONF"
-chk "config on → on"   test "$(libsh "mentor_context_gate_state '$expect_root'")" = "on"
-rm -f "$RCONF"
+chk "no config file → empty"        test -z "$(libsh "mentor_config_get '$expect_root' planning_intent")"
 
 echo "== G. mentor_ensure_gitignore (commit config.json + constitution.md; idempotent) =="
 GI="$STATE/.gitignore"
@@ -431,30 +411,6 @@ printf 'CUSTOM\n' > "$GI"
 libsh "mentor_ensure_gitignore '$STATE'"
 chk "never overwrites an existing .gitignore"  test "$(cat "$GI")" = "CUSTOM"
 
-echo "== H. mentor_context_tokens extraction =="
-TX="$ROOT/tx.jsonl"
-python3 - "$TX" <<'PY'
-import json,sys
-lines=[
- {"type":"assistant","message":{"usage":{"input_tokens":10,"cache_read_input_tokens":100000,"cache_creation_input_tokens":8000}}},
- {"type":"assistant","isSidechain":True,"message":{"usage":{"input_tokens":5,"cache_read_input_tokens":5,"cache_creation_input_tokens":5}}},
- {"type":"assistant","message":{"model":"<synthetic>","usage":{"input_tokens":0,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}},
-]
-open(sys.argv[1],"w").write("\n".join(json.dumps(l) for l in lines)+"\n")
-PY
-chk "sums input+cache, skips sidechain + <synthetic>" test "$(libsh "mentor_context_tokens '$TX'")" = "108010"
-python3 - "$TX" <<'PY'
-import json,sys
-lines=[
- {"type":"assistant","message":{"usage":{"input_tokens":10,"cache_read_input_tokens":228000,"cache_creation_input_tokens":0}}},
- {"type":"system","subtype":"compact_boundary","compactMetadata":{"postTokens":7000}},
-]
-open(sys.argv[1],"w").write("\n".join(json.dumps(l) for l in lines)+"\n")
-PY
-chk "compact_boundary postTokens wins after usage" test "$(libsh "mentor_context_tokens '$TX'")" = "7000"
-printf 'not json\n{"type":"user"}\n' > "$TX"
-chk "no usage record → empty" test -z "$(libsh "mentor_context_tokens '$TX'")"
-
 echo "== I. mentor_no_repo_state_dir — portable default, existing Claude-era tree kept, override wins =="
 chk "default → XDG state tree" \
   test "$(libsh "mentor_no_repo_state_dir")" = "$SANDBOX/.local/state/mentor/_no-repo"
@@ -464,57 +420,6 @@ chk "existing Claude fallback stays in use" \
 rm -rf "$SANDBOX/.claude/mentor"
 OVERRIDE_NR="$SANDBOX/custom-mentor-state/_no-repo"
 chk "MENTOR_STATE_HOME overrides no-repo base" test "$(HOME="$SANDBOX" MENTOR_STATE_HOME="$SANDBOX/custom-mentor-state" bash -c '. "'$LIB'"; mentor_no_repo_state_dir')" = "$OVERRIDE_NR"
-echo "== J. mentor_find_transcript / mentor_context_verdict (the shared warn-only check) =="
-# One implementation, two callers: begin-plan.sh at arm time and `plan-state.sh
-# context`. Warn-only (v4.2.0): over the
-# ask threshold the verdict is HIGH and every caller proceeds — never stricter than the gate.
-CFG="$ROOT/cfg"; mkdir -p "$CFG/projects/proj"
-mkverdict_tx() { python3 - "$CFG/projects/proj/sess.jsonl" "$1" <<'PY'
-import json,sys
-open(sys.argv[1],"w").write(json.dumps({"type":"assistant","message":{"usage":{
-  "input_tokens":10,"cache_read_input_tokens":int(sys.argv[2])-10,
-  "cache_creation_input_tokens":0}}})+"\n")
-PY
-}
-# Pin the environment: a developer's own MENTOR_CONTEXT_* must not move an assertion.
-CLEAN="unset MENTOR_CONTEXT_GATE MENTOR_CONTEXT_BLOCK_TOKENS MENTOR_CONTEXT_WARN_TOKENS MENTOR_CONTEXT_WARN_HIGH_TOKENS MENTOR_CONTEXT_WINDOW CLAUDE_CODE_AUTO_COMPACT_WINDOW MENTOR_CONTEXT_WARN_RATIO MENTOR_CONTEXT_HIGH_RATIO CLAUDE_CODE_SESSION_ID || true;"
-chk "no transcript → empty path" \
-  test -z "$(libsh "$CLEAN CLAUDE_CONFIG_DIR='$CFG' mentor_find_transcript '$expect_root'")"
-V="CLAUDE_CONFIG_DIR='$CFG' CLAUDE_CODE_SESSION_ID=sess"
-mkverdict_tx 400000
-chk "session id locates the transcript exactly" \
-  test "$(libsh "$CLEAN $V mentor_find_transcript '$expect_root'")" = "$CFG/projects/proj/sess.jsonl"
-chk "over ask → HIGH (warn-only)" \
-  test "$(libsh "$CLEAN $V mentor_context_verdict '$expect_root'")" = "HIGH 400000 200000 350000"
-# A leftover pre-v4.2.0 bypass marker changes nothing.
-: > "$STATE/.context-bypass-sess"
-chk "over ask, legacy bypass marker → still HIGH" \
-  test "$(libsh "$CLEAN $V mentor_context_verdict '$expect_root'")" = "HIGH 400000 200000 350000"
-rm -f "$STATE/.context-bypass-sess"
-chk "bypass predicate retired"               libsh "$CLEAN ! type mentor_context_bypassed >/dev/null 2>&1"
-mkverdict_tx 230000
-chk "between warn and ask → WARN" \
-  test "$(libsh "$CLEAN $V mentor_context_verdict '$expect_root'")" = "WARN 230000 200000 350000"
-mkverdict_tx 50000
-chk "under warn → OK" \
-  test "$(libsh "$CLEAN $V mentor_context_verdict '$expect_root'")" = "OK 50000 200000 350000"
-# v4.3.0 clamp: a limit set below the warn cap pulls warn down with it (warn ≤ warn_high ≤ high).
-chk "env threshold override honored (warn clamped under the limit)" \
-  test "$(libsh "$CLEAN $V MENTOR_CONTEXT_BLOCK_TOKENS=1000 mentor_context_verdict '$expect_root'")" = "HIGH 50000 900 1000"
-# The verdict reads the same window as the hooks: a host-reported context-window file in
-# this session's dir (CLAUDE_CODE_SESSION_ID) turns on the percent thresholds.
-mkdir -p "$ROOT/vstate/sessions/sess"; echo 200000 > "$ROOT/vstate/sessions/sess/context-window"
-mkverdict_tx 120000
-chk "session context-window file → ratio thresholds (100000 / 130000)" \
-  test "$(libsh "$CLEAN $V MENTOR_STATE_HOME='$ROOT/vstate' mentor_context_verdict '$expect_root'")" = "WARN 120000 100000 130000"
-chk "no window source → the same 120000 reads OK against the caps" \
-  test "$(libsh "$CLEAN $V mentor_context_verdict '$expect_root'")" = "OK 120000 200000 350000"
-chk "kill switch → empty verdict" \
-  test -z "$(libsh "$CLEAN $V MENTOR_CONTEXT_GATE=off mentor_context_verdict '$expect_root'")"
-chk "unmeasurable → empty verdict" \
-  test -z "$(libsh "$CLEAN CLAUDE_CONFIG_DIR='$ROOT/nothing' mentor_context_verdict '$expect_root'")"
-chk "verdict is set -e safe with no repo" \
-  libsh "$CLEAN CLAUDE_CONFIG_DIR='$ROOT/nothing' v=\"\$(mentor_context_verdict '')\"; echo ok >/dev/null"
 
 echo "== mentor_ensure_private_dir — 700 down the whole path, self-healing =="
 # `mkdir -p -m 700 a/b/c` modes only `c`; the helper exists because that can never

@@ -43,7 +43,9 @@ re-derives the criteria from memory and confirms instead of checking.
 - The grade identity (`Step N`, `Topic N`, `Goal check`, `PR`, or `After-merge`) and the
   author's model family, or `unknown`. Ask the verifier to report its actual family or
   `unknown`.
-- The access mode, named in one line (`Access: read-only` or `Access: scratch-write`).
+- The access mode, named in one line (`Access: read-only` or `Access: scratch-write`),
+  and dispatch the verifier with matching permissions (a worker or sandbox that can write
+  the scratch paths), since a brief line alone grants nothing.
   A compiler or test runner needs somewhere to write, so a strictly read-only grader
   hands back on its environment instead of grading the code:
   - **scratch-write**, the default for a grade that compiles code or runs integration

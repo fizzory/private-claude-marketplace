@@ -176,9 +176,9 @@ the run marker, then ask. Write no `paused` row.
 
 Inside a plan run, with or without a merge grant, when the runbook has **After merge**
 lines, the Done review carries one line, `Post-merge steps: not independently graded
-unless merged in this session`. Step 6's After-merge grade replaces it; on every other
-branch (Leave open, auto-merge, a merge outside the session, a paused walk) it stays, so
-the review never implies a check that did not run.
+unless merged in this session`. Step 6 replaces it after a merge in this session; on every
+other branch (Leave open, auto-merge, a merge outside the session) it stays, so the review
+never implies a check that did not run.
 
 Without a merge grant, ask via `AskUserQuestion`, with the runbook's **Before merge** block from the plan's
 `## Done review` (or `Runbook: n/a, merge is self-contained`) and the verifier's grade in
@@ -254,9 +254,13 @@ user says no → say what you found and stop; never hand-edit `.state.json`.
 **After-merge walk.** When the plan's Done review carries a runbook, walk its **After
 merge** steps in order once the merge landed. Execute a line only when it is not on the
 always-pause list; a deploy, a production config change, a data migration, or a message
-to people outside the session pauses with that line as the one question. A deploy line's
-question also shows the delta it would ship, one row per commit (commit, author, change,
-time) from `git log <deployed-ref>..<merge-sha>`, because a release can carry other
+to people outside the session pauses with that line as the one question; a pause the
+user approves runs the line, which is then logged by its result, and only a line left
+unrun stays `paused`. A deploy line's question also shows the delta it would ship, one
+row per commit (commit, author, change, time) from `git log <deployed-ref>..<merge-sha>`,
+where `<deployed-ref>` is the commit or tag that environment runs now (from the runbook,
+a release tag or the deploy tool; the merge's first parent when none is known, said so
+in the question), because a release can carry other
 people's commits and the user should not have to ask what goes out. Log a row per
 line (`PASS`, `paused`, or `FAIL`). Rollback lines are shown, never run, unless the human
 asks. Inside a plan run Step 4 already set `implemented`, so a paused After-merge line
@@ -316,8 +320,10 @@ verifier per `planning/references/verifier-contract.md` (the **After-merge** row
 and save its block to `verdicts/after-merge.md`. Every earlier grade ended before the
 merge, so this is the only check that post-merge plan clauses actually happened. Its
 `[GOAL]` gaps go into the Done review's Leftovers; it never re-plans or reverts. Replace
-the Done review's `Post-merge steps:` line (Step 4) with the verdict and its path; when
-the grade does not run, the line stays.
+the Done review's `Post-merge steps:` line (Step 4) with the verdict and its path. When
+the merge landed in this session but the grade does not run (a paused walk, or a
+post-merge run the walk depends on that came back red), replace it with `Post-merge steps: not independently graded
+(<reason>)`, so the review never implies a check that did not run.
 
 ## Done when
 

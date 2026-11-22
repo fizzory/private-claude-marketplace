@@ -622,7 +622,9 @@ items 1–3).
   batched per role, the main thread never waits idle on a round, and each return answers
   per item with a `needs:` line for anything another role must settle first. Triage greps
   the plan's decision log before briefing a question again, and effort, model and provider
-  come from the session mapping or the host's or router's role config, never from a brief.
+  come from the session mapping or the host's or router's role config, never from a brief:
+  one rule in Role resolution that the verifier follows too. Grilling's triage also greps
+  the plan's decision log before asking.
 
 ## Changes in v7.2.0
 

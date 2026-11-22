@@ -404,6 +404,10 @@ intended outcome.
   including "decide; do not ask" for decision work. If delegation is unavailable or
   prohibited, perform the work serially in the main thread, retaining the same scope,
   evidence, and verification contract, including labelled self-grading when required.
+- **Effort, model and provider** come from an explicit session mapping when it names
+  them, otherwise from the host's or router's role config; a brief never picks them.
+  One rule for every role, so a session choice reaches decision agents and the verifier
+  alike.
 
 **Decision-maker contract** — apply to whichever agent resolves a decision:
 
@@ -420,8 +424,7 @@ intended outcome.
   decision agent with it.
 - **Never wait idle on a round.** Keep on with the triage, research and drafting that do
   not depend on it, and collect its results when they arrive.
-- **Effort, model and provider** come from an explicit session mapping when it names
-  them, otherwise from the host's or router's role config; a brief never picks them.
+- Effort, model and provider: Role resolution above.
 - Every decision becomes one decision-log row (Step 4), `result: decided`.
 - Why: `references/rationale.md` → "Step 3 — why decision agents go out in rounds".
 
@@ -945,7 +948,7 @@ drafts, feedback, and tracked writes**).
 2. **Grade every step independently.** When a step looks done, dispatch one fresh
    verifier with the plan-level Goal: first, then the step's `Goal:` and `Done when:`
    per `references/verifier-contract.md`.
-   Use the host's verifier role settings and wait for the returned block; save it
+   Resolve its settings through Role resolution and wait for the returned block; save it
    verbatim to `verdicts/step-N.md`, overwriting the previous grade. On PASS, append
    decision `Step N graded`, evidence
    `verdicts/step-N.md · <grading> · <author>/<verifier> family`, result `PASS`; then run

@@ -285,8 +285,8 @@ diagram workers report `diagrams=N dd=N ids-prefixed=yes tags-balanced=yes`, whe
 inlined as `<svg class="dd">` and must equal `diagrams`. Named fields make an absence visible, where prose
 would hide it.
 
-Launch every independent worker in the first wave, up to twelve cells workers (fewer when the host or a
-router caps concurrent jobs); leftover cells slices go in a second wave.
+Launch every independent worker in the first wave, up to twelve cells workers; leftover cells slices go in
+a second wave.
 **Serial fallback:** without delegation, the main thread writes the same files in the same order and runs
 the same checks, one fragment at a time, reading the plan and `_ids.md` by heading (§1).
 

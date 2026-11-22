@@ -366,8 +366,9 @@ revision's redraft is a new pin) needs all of `_ids.md`, and writing `90-decisio
 decision log.
 
 **The wave cap.** Six cells workers per wave had no recorded reason. That run had eleven cells slices, so
-five waited for a second wave, about 11 minutes after the first. Twelve covers it in one wave; "fewer when
-the host or a router caps concurrent jobs" keeps a router's own job limit in charge.
+five waited for a second wave, about 11 minutes after the first. Twelve covers it in one wave. The cap names no
+router or other external tool, so previewing behaves the same with or without one (owner decision,
+2026-11-22: every mentor rule must work on its own).
 
 **Tried and dropped: one input file per cells worker.** A helper cut each worker's `_ids.md` entries, its
 `_trace.md` sections, the cited plan sections and the reference sections into one file (about 150 KB for

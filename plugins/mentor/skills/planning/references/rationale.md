@@ -110,7 +110,7 @@ time, and one of them held up the run for 10 minutes. A round sends every
 ready item at once, one brief per role and all roles in parallel, so the wait is the slowest brief, not
 the sum of pairs. A `needs:` line waits for the next round instead of becoming a message to a running
 agent, so no agent is redirected mid-task. Grepping the decision log first (bucket 1) keeps a settled
-question from being briefed again. Effort, model and provider belong to the host's or router's role
+question from being briefed again. Effort, model and provider belong to the host's role
 config, so a brief never overrides what the user set there.
 
 ## Step 4 — why verify is one call

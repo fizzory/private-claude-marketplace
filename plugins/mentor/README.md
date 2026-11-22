@@ -616,13 +616,12 @@ items 1–3).
   pin the ids, and the plan's decision log whole only to write `90-decisions.html`, so a
   compaction reloads the index plus the sections the step needs. The charter names it as a
   sanctioned exception.
-- **Up to twelve cells workers per wave** (was six), fewer when the host or a router caps
-  concurrent jobs.
+- **Up to twelve cells workers per wave** (was six).
 - **Planning batches decision agents.** They go out one round at a time with questions
   batched per role, the main thread never waits idle on a round, and each return answers
   per item with a `needs:` line for anything another role must settle first. Triage greps
   the plan's decision log before briefing a question again, and effort, model and provider
-  come from the session mapping or the host's or router's role config, never from a brief:
+  come from the session mapping or the host's role config, never from a brief:
   one rule in Role resolution that the verifier follows too. Grilling's triage also greps
   the plan's decision log before asking.
 

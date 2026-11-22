@@ -405,7 +405,7 @@ intended outcome.
   prohibited, perform the work serially in the main thread, retaining the same scope,
   evidence, and verification contract, including labelled self-grading when required.
 - **Effort, model and provider** come from an explicit session mapping when it names
-  them, otherwise from the host's or router's role config; a brief never picks them.
+  them, otherwise from the host's role config; a brief never picks them.
   One rule for every role, so a session choice reaches decision agents and the verifier
   alike.
 

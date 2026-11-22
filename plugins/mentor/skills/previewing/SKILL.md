@@ -72,6 +72,7 @@ else
   state_dir="$(git rev-parse --show-toplevel 2>/dev/null || pwd)/.mentor"
 fi
 assets="<this skill's base directory>/assets"; [ -f "$assets/page.css" ] || echo "assets missing: $assets"
+scripts="<this skill's base directory>/scripts"; [ -f "$scripts/md-slice.sh" ] || echo "scripts missing: $scripts"
 ls -t "$state_dir"/plans/*/plan.md 2>/dev/null | head -3   # candidate plan subjects, newest first
 if [ -n "$plugin_root" ] && [ -f "$plugin_root/hooks/plan-state.sh" ]; then
   sibling_wts="$(bash "$plugin_root/hooks/plan-state.sh" gate --verbose | sed -n 's/^elsewhere=\([^ ]*\).*/\1/p')"
@@ -131,8 +132,7 @@ mismatch as a revision. When it does not but `_ids.md` does, an earlier build st
 subject is not a plan or `_plan.md` still matches the plan's stamp, keep the pinned ids and the renderer in
 `_ids.md`, and go to §3. There, list every fragment `_ids.md` calls for (each card's `-0-shell`, `-h<n>`,
 `-s<k>` and `-z-close`, each included section file and the main thread's own parts), keep those `_built.md`
-lists with a matching hash, and write all the others in the next wave (§3's six-worker cap and second wave
-still apply); each new cells worker writes its own style file, numbered after the highest `w<n>` already in
+lists with a matching hash, and write all the others in the next wave (§3's wave cap still applies); each new cells worker writes its own style file, numbered after the highest `w<n>` already in
 `_parts/20-scenarios/`, so no kept style file is overwritten. If the plan changed, first run §7 steps 1–2 against `_plan.md` (diff,
 then append and retire in `_ids.md`), copy the plan to `_plan.md` once the ids are pinned again, delete the
 retired parts, and count every fragment §7 step 3 names (always `00-head.html`, for the new stamp) as missing
@@ -196,6 +196,15 @@ in the main thread and write `_ids.md` directly, with no `_trace.md`.
 - **Caps.** A card holds at most 6 hops, 12 variants and 40 frames, and a parent at most 8 edge cards; split
   before pinning ids.
 
+**The main thread reads big files by heading.** `plan.md`, `_plan.md` and `_ids.md` outgrow what a context can
+reload after every compaction. Read one whole only to pin the ids (a re-run's or revision's redraft is a new
+pin), and the plan's decision log whole only to write `90-decisions.html`. Otherwise use
+`bash "$scripts/md-slice.sh" index <file>`, then `section <file> '<ERE>'…` (`'^S4( |$)'` for card S4 without
+S4a) and `rows <file> 3 5-7` for decision-log rows; list every card and hop id with
+`grep -noE '^(### S[0-9]+[a-z]*|- h[0-9]+ · [^ ]+)' _ids.md`. To edit, `Read` the lines the index names. After a
+compaction, reload the index and only the sections the current step needs. Why: `references/rationale.md` →
+"Main-thread reads by heading, and twelve cells workers per wave".
+
 ## §2 — Diagrams
 
 Only when the section plan includes Architecture or an ER diagram in Data and contracts, or `_ids.md` lists any
@@ -254,7 +263,7 @@ sidebar, which lists every included section and card, and the include line for t
 launching the workers, so nothing is left for the main thread to do while they run.
 
 **Cells workers** write one file per hop plus one style file, packed per
-`references/surface-mockup-contract.md` §9: at most 30 frames each, at most 6 per wave. Each brief carries the
+`references/surface-mockup-contract.md` §9: at most 30 frames each. Each brief carries the
 token `mentor:frontend-mockup` and the inputs that section lists.
 
 **Section workers**, one per section the §1 section plan includes other than Sequences, plus one sequences
@@ -276,10 +285,10 @@ diagram workers report `diagrams=N dd=N ids-prefixed=yes tags-balanced=yes`, whe
 inlined as `<svg class="dd">` and must equal `diagrams`. Named fields make an absence visible, where prose
 would hide it.
 
-Launch every independent worker in the first wave, up to six cells workers; leftover cells slices go in a
-second wave.
+Launch every independent worker in the first wave, up to twelve cells workers; leftover cells slices go in
+a second wave.
 **Serial fallback:** without delegation, the main thread writes the same files in the same order and runs
-the same checks, one fragment at a time.
+the same checks, one fragment at a time, reading the plan and `_ids.md` by heading (§1).
 
 ## §4 — Assemble and check
 
@@ -428,7 +437,8 @@ carries `plan_sha` in `<meta name="mentor-plan-sha256">` and its header reads "B
 1. `diff <(sed 's/ *✅//g' "$review_dir/_plan.md") <(sed 's/ *✅//g' "$plan")` shows the changed plan text,
    ignoring progress marks as the stamp does; with no `_plan.md`, treat every section as changed.
 2. Map changed plan sections to fragments through `_ids.md`: each card's `plan:` list, the `## Sections`
-   lines and each flow's line under `## Flows`. Re-run the §1 inventory for affected scenarios: append new
+   lines and each flow's line under `## Flows`. Find them by heading (§1): `grep -n` the changed section
+   names in `_ids.md`, then `bash "$scripts/md-slice.sh" section _ids.md` the cards it hits, `'^Sections'` and `'^Flows'`. Re-run the §1 inventory for affected scenarios: append new
    cards, hops, variants and flows, move vanished ones to `retired:`, and keep every existing id.
 3. Regenerate those shells, hop files, flow files and section fragments (§3), plus `10-answers.html` and
    `90-decisions.html` when the questions or the decision log changed, and `00-head.html` for the new stamp
@@ -465,6 +475,9 @@ Hand edits to `review.html` never flow back into the plan; the next regeneration
 - Do **not** read `_trace.md` in the main thread (§1), or let mockup HTML into it while workers run; workers
   return paths and Self-check lines only. The serial fallback (§3) writes fragments in the main thread one at a
   time and does not re-read them.
+- Do **not** read `plan.md`, `_plan.md` or `_ids.md` whole in the main thread except for the two reads §1
+  allows; read them by heading. This binds previewing's own steps: a hook's or planning's re-read stays
+  planning's call.
 - Do **not** draw a plan's link as today's behaviour when the code's chain says otherwise.
 - Do **not** run a command against a running service, container or database during research (§1).
 - Do **not** put a `<script>` or switching CSS in a hop or flow file, or embed a picture as base64.

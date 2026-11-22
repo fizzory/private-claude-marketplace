@@ -102,6 +102,17 @@ exit 2), so a flag only moves the failure to someone else's machine. Hand grep a
 file list instead — `find` walks, `grep` only reads — which is what `sweep` does, worktree
 resolution included.
 
+## Step 3 — why decision agents go out in rounds
+
+On the repository-tags plan (2026-11-20), revising the plan after the user's answers took 7
+decision-agent runs and 31 minutes of agent time. They went out in pairs, so about 20 minutes of wall
+time, and one of them held up the run for 10 minutes. A round sends every
+ready item at once, one brief per role and all roles in parallel, so the wait is the slowest brief, not
+the sum of pairs. A `needs:` line waits for the next round instead of becoming a message to a running
+agent, so no agent is redirected mid-task. Grepping the decision log first (bucket 1) keeps a settled
+question from being briefed again. Effort, model and provider belong to the host's role
+config, so a brief never overrides what the user set there.
+
 ## Step 4 — why verify is one call
 
 A session was observed hand-rebuilding a different grep/awk one-liner for these checks on 5

@@ -23,9 +23,9 @@ re-derives the criteria from memory and confirms instead of checking.
   post-merge run, and the After-merge walk**. (Why: `rationale.md` → **Verifier contract
   — why there is an After-merge grade**.)
 
-- Resolve the verifier through planning → "Role resolution". Scheduling, model,
-  and effort come from the host's verifier role; the caller must wait for its returned
-  verdict before acting on the grade or ticking a step.
+- Resolve the verifier through planning → "Role resolution", which also sets its
+  scheduling, model and effort; the caller must wait for its returned verdict before
+  acting on the grade or ticking a step.
 - The verifier SHOULD use another model family than the author. Record the actual
   families, or `unknown`; different runtimes do not prove different families.
 - Where delegation is unavailable or prohibited, run the same checks serially in the main

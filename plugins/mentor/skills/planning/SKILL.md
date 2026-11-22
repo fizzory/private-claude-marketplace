@@ -364,7 +364,8 @@ principle in the decision log only when it changes a choice, so the log records
 decisions rather than a checklist.
 Triage each item into exactly one bucket, in this order:
 
-1. **Codebase-answerable** — the files, config, history, or docs settle it.
+1. **Codebase-answerable** — the files, config, history, or docs settle it, or the
+   plan's decision log already does (grep it first).
    Answer it yourself; never ask the human what the material can answer.
 2. **Experiment-settleable** — a fact a quick probe can establish (does this
    flag exist, which form does the tool accept, how long does it take). Run the
@@ -403,16 +404,29 @@ intended outcome.
   including "decide; do not ask" for decision work. If delegation is unavailable or
   prohibited, perform the work serially in the main thread, retaining the same scope,
   evidence, and verification contract, including labelled self-grading when required.
+- **Effort, model and provider** come from an explicit session mapping when it names
+  them, otherwise from the host's role config; a brief never picks them.
+  One rule for every role, so a session choice reaches decision agents and the verifier
+  alike.
 
 **Decision-maker contract** — apply to whichever agent resolves a decision:
 
 - **Brief** (self-contained; the agent inherits none of your context): open with the
-  goal as above, then the question in plain words, the options known so far with their consequences, the
+  goal as above, then each question in plain words with the options known so far and their consequences, the
   constitution's Decision authority section verbatim, and the evidence with
   `file:line` or command output.
-- **Return**: `choice · why · evidence · product_call: yes|no`. A `yes` sends the
-  item to bucket 4. Several independent items may go out in one batch.
+- **Return**, per item: `choice · why · evidence · product_call: yes|no`, plus one
+  `needs: <role> · <question>` line for anything another role must settle first. A
+  `yes` sends that item to bucket 4.
+- **One round at a time, batched.** Send every item that is ready as one brief per
+  role, and all the roles' briefs in one message, so they run in parallel. A `needs:`
+  line goes into that role's brief in the next round; never message a running
+  decision agent with it.
+- **Never wait idle on a round.** Keep on with the triage, research and drafting that do
+  not depend on it, and collect its results when they arrive.
+- Effort, model and provider: Role resolution above.
 - Every decision becomes one decision-log row (Step 4), `result: decided`.
+- Why: `references/rationale.md` → "Step 3 — why decision agents go out in rounds".
 
 **Mid-loop scope change.** A scope-change request (not a decision *answer* —
 a change to what the plan covers) pauses the per-item loop: confirm the scope
@@ -934,7 +948,7 @@ drafts, feedback, and tracked writes**).
 2. **Grade every step independently.** When a step looks done, dispatch one fresh
    verifier with the plan-level Goal: first, then the step's `Goal:` and `Done when:`
    per `references/verifier-contract.md`.
-   Use the host's verifier role settings and wait for the returned block; save it
+   Resolve its settings through Role resolution and wait for the returned block; save it
    verbatim to `verdicts/step-N.md`, overwriting the previous grade. On PASS, append
    decision `Step N graded`, evidence
    `verdicts/step-N.md · <grading> · <author>/<verifier> family`, result `PASS`; then run

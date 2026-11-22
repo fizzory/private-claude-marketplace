@@ -51,7 +51,9 @@ once-per-session planning-intent nudge for conversational planning requests. Bef
 subcommand, amend this paragraph first: if the addition contradicts it, the addition is
 wrong. `plan-state.sh begin-run <slug>` shares the existing run-marker writer with
 approval; `retro-pr-body-check.sh` is a read-only CLI for PR-body structure and
-redaction, not a hook or run sequencer. (The v1.0.0 slim-down regrew 32 → 79 files in five weeks; this paragraph and
+redaction, not a hook or run sequencer; previewing's `scripts/md-slice.sh` is a read-only CLI
+that prints a Markdown file's heading index, sections or numbered table rows, not a hook or run
+sequencer. (The v1.0.0 slim-down regrew 32 → 79 files in five weeks; this paragraph and
 `hooks/tests/test-hook-roster.sh` exist so it doesn't again.)
 
 ## Quick start
@@ -237,7 +239,7 @@ Since v3.0.0 that binds automated contributors in a stronger form as well: **new
 land as skill prose or `references/rationale.md` — never as new hooks, new scripts, new
 state tokens, or new `plan-state.sh` subcommands.** (v6.0.0's Stop hook/run marker,
 v6.3.0's plan-file pointers/hash commands, and v6.5.0's `plan-state.sh begin-run`
-subcommand and `retro-pr-body-check.sh` CLI are sanctioned exceptions, added by
+subcommand and `retro-pr-body-check.sh` CLI, and previewing's read-only `md-slice.sh`, are sanctioned exceptions, added by
 human-approved plans that amended the charter first — the route any future machinery
 takes too.) A new domain's know-how lands as a new
 indexed reference under `skills/planning/references/playbooks/`, never as domain text
@@ -601,6 +603,27 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_OPENER` | `auto` (default) · `vscode` · `chrome` · `system` |
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
+
+## Changes in v7.3.0
+
+Compatibility decision: **non-breaking minor: previewing reads big files by heading, a
+wider cells wave, batched decision agents; no workflow-state change** (part of #13,
+items 1–3).
+
+- **Previewing reads by heading.** A new read-only `skills/previewing/scripts/md-slice.sh`
+  prints a file's heading index, matching sections or numbered decision-log rows. The main
+  thread reads `plan.md`, `_plan.md` and `_ids.md` by heading. It reads one whole only to
+  pin the ids, and the plan's decision log whole only to write `90-decisions.html`, so a
+  compaction reloads the index plus the sections the step needs. The charter names it as a
+  sanctioned exception.
+- **Up to twelve cells workers per wave** (was six).
+- **Planning batches decision agents.** They go out one round at a time with questions
+  batched per role, the main thread never waits idle on a round, and each return answers
+  per item with a `needs:` line for anything another role must settle first. Triage greps
+  the plan's decision log before briefing a question again, and effort, model and provider
+  come from the session mapping or the host's role config, never from a brief:
+  one rule in Role resolution that the verifier follows too. Grilling's triage also greps
+  the plan's decision log before asking.
 
 ## Changes in v7.2.0
 

@@ -146,7 +146,7 @@ Then decide:
 Before any merge is offered, dispatch one fresh verifier per
 `planning/references/verifier-contract.md` (the **Merge** row): the PR diff
 (`gh pr diff <number>`), the plan path when a plan matches the branch (Step 5's slug
-match), and its `## Goal check`. Use the host's verifier role settings and wait for
+match), and its `## Goal check`. Resolve its settings through planning → "Role resolution" and wait for
 the verdict; inside a plan run, save the returned block verbatim to `verdicts/pr.md`
 with the contract's grading and family headers. This keeps the merge grade available
 to a resumed run. Standalone merging keeps its existing reporting without creating

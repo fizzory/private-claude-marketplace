@@ -8,7 +8,8 @@ SessionStart re-attachment, and automatic `plan_sha256` recording on Write/Edit 
 `plan-open.sh`), verifier subagents, and hosted Artifact publishing on top
 of the portable skills and `.mentor/` state contract.
 
-Verifier scheduling, model, and effort come from the host's verifier role. The caller
+Verifier scheduling, model, and effort come from planning → Role resolution (an explicit
+session mapping first, otherwise the host's verifier role). The caller
 waits for the returned verdict, then saves its block verbatim under the plan's
 `verdicts/` directory per `skills/planning/references/verifier-contract.md`; before a
 step tick, it saves `verdicts/step-N.md`, appends the PASS row, and records the plan write.

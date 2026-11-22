@@ -76,7 +76,7 @@ proposed changes; the fixes themselves are follow-on work.
 |---|---|---|
 | Source code | What the markup, copy, and handlers do | How it renders or behaves at runtime, unless you ran it |
 | Screenshot | What is visible in that frame | Hover, focus, keyboard, other states, live behavior |
-| Description, flow notes, or a plan's proposed UI | Issues in the described structure | Anything about the real app — label output as a design spec |
+| Description, flow notes, a plan's proposed UI, or a preview mockup (`mentor:previewing`) | Issues in the described or drawn structure, including a state the mockup draws only on hover | Anything about the real app — label output as a design spec |
 | A running app + browser tools | What you observed and executed | Accessibility conformance or real-user comprehension |
 
 Nothing concrete supplied → produce a clearly labeled design specification, never invented

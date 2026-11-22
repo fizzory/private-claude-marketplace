@@ -29,6 +29,13 @@ Before planning completes the plan, find and cite with `file:line`:
   a pre-existing failure found here is a scope decision, not a surprise at the end.
 - **The base branch** and whether it is protected, from the remote's settings or the
   repo's docs.
+- **How each persona signs in**, for every persona a permission or access scenario
+  names: an interactive session, a service or application token, and so on, and
+  confirm that the endpoint in question accepts that channel. A machine-only or
+  service identity never stands in for a person, because grants and tests planned
+  for a persona that cannot reach the endpoint are wasted work and a rollback hazard.
+  (Why: `../rationale.md` → **Software-change research — why each persona's sign-in
+  channel is cited**.)
 
 ## 2. Definition of done (Goal check and `Done when:`)
 
@@ -45,6 +52,10 @@ Before planning completes the plan, find and cite with `file:line`:
   before and after each check, and repeat this proof when reusing output. All HEADs
   must match and every status must be empty for reuse; an unchanged HEAD alone hides
   tracked or untracked edits.
+- **Scratch-write grades** ([the verifier contract](../verifier-contract.md) → access
+  mode): the brief points `TMPDIR` and the toolchain's cache variables (`GOCACHE`/`GOTMPDIR`,
+  `NPM_CONFIG_CACHE`, …) at writable ignored or out-of-repo paths, and the verifier records
+  `git status --porcelain --untracked-files=all` before and after; the two must match.
 - **Command hygiene**: a `git diff`/`git log` against a path puts `--` before the path
   (`git log <range> -- <path>`) — without it, a path that later collides with a revision
   name fails the check.
@@ -74,7 +85,11 @@ Replaces planning's general deliver state, in this order:
    merges; otherwise its merge question is the run's hand-over (Step 4). Then it walks
    the runbook's **After merge** steps (Step 6).
 
-The run is `done` when the PR is open and graded (or merged, under a merge grant).
+The run is `done` when the PR is open and graded (or merged, under a merge grant). When a
+merge lands in this session (under a merge grant, or on the user's Merge now at the
+hand-over), merging Step 6's After-merge walk and grade follow, and their result is
+reported on one line under the verdict line: `after-merge: PASS | FAIL | not graded ·
+<n> leftovers added`.
 
 ## 5. Evidence kinds (the Done review)
 
@@ -114,3 +129,15 @@ a feature-flag flip, a config or secret change, or a deploy: numbered **Before m
   plan's steps don't account for and that was clean before the pass; if such a path was
   already dirty, or a path the plan keeps imports or references it, leave it and log a
   `review?: needed` row. Log the pass itself as one decision-log row.
+- **Self-explanation audit before a UI step's grade**: when the plan's goal or
+  constraints ask for a minimal-copy or self-explanatory UI, run
+  `Skill(skill="mentor:frontend-self-ex-review")` in audit mode on the built UI before
+  the first grade of each step that builds or changes that UI, and hand its findings to
+  that step's verifier. The grader then judges the work with the audit in view, instead
+  of a Verification topic meeting the same finding after every step is ticked. When that
+  step is also the last one, run the audit after the cleanup pass above, so the audit and
+  the grader see the same tree. Fix a finding in the step only when its `Done when:` or the
+  Goal check cannot pass without it; list every other finding as a Done review leftover,
+  and log a product call among them as a `review?: needed` row. (Why:
+  `previewing/references/rationale.md` → **Why the self-explanation audit runs on the
+  mockup**.)

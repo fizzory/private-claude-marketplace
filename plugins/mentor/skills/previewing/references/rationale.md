@@ -341,3 +341,16 @@ a script-disabled `<iframe srcdoc>` with no switching, skipped surfaces with no 
 publishing. All three conflict with this skill: switching is CSS radios on the page, the change predicate
 replaces the visual-delta rule, and the page may be offered as an Artifact. `surface-mockup-contract.md`
 replaces it and covers every surface; the `mentor:frontend-mockup` token it introduced is kept.
+
+## Why the self-explanation audit runs on the mockup
+
+A design that aims for "lowest text" tends to move meaning into hover. In one plan run
+the preview mockup drew a tooltip open; the UX decision, the build step and the design
+pass all accepted it. Only a Verification topic, at the end, failed it: recovery hints
+shown only on hover, which keyboard users cannot reach. That forced a fix round, and
+the touch path was accepted as a known gap. `frontend-self-ex-review` already accepts a
+proposed design and already flags a tooltip that is the only carrier of essential
+information; the problem was only when it ran. §4 step 2 runs it on the mockup before
+approval, and software-change's Run rules run it again on the built UI before that
+step's grade (the owner chose both), so the grader sees the audit instead of meeting the
+finding in Verification. Source: issue #11 item 1.

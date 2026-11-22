@@ -438,7 +438,7 @@ carries `plan_sha` in `<meta name="mentor-plan-sha256">` and its header reads "B
    ignoring progress marks as the stamp does; with no `_plan.md`, treat every section as changed.
 2. Map changed plan sections to fragments through `_ids.md`: each card's `plan:` list, the `## Sections`
    lines and each flow's line under `## Flows`. Find them by heading (§1): `grep -n` the changed section
-   names in `_ids.md`, then `md-slice.sh section` the cards it hits, `'^Sections'` and `'^Flows'`. Re-run the §1 inventory for affected scenarios: append new
+   names in `_ids.md`, then `bash "$scripts/md-slice.sh" section _ids.md` the cards it hits, `'^Sections'` and `'^Flows'`. Re-run the §1 inventory for affected scenarios: append new
    cards, hops, variants and flows, move vanished ones to `retired:`, and keep every existing id.
 3. Regenerate those shells, hop files, flow files and section fragments (§3), plus `10-answers.html` and
    `90-decisions.html` when the questions or the decision log changed, and `00-head.html` for the new stamp

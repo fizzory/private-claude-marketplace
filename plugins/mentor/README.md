@@ -604,6 +604,26 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
 
+## Changes in v7.3.0
+
+Compatibility decision: **non-breaking minor: previewing reads big files by heading, a
+wider cells wave, batched decision agents; no workflow-state change** (part of #13,
+items 1–3).
+
+- **Previewing reads by heading.** A new read-only `skills/previewing/scripts/md-slice.sh`
+  prints a file's heading index, matching sections or numbered decision-log rows. The main
+  thread reads `plan.md`, `_plan.md` and `_ids.md` by heading. It reads one whole only to
+  pin the ids, and the plan's decision log whole only to write `90-decisions.html`, so a
+  compaction reloads the index plus the sections the step needs. The charter names it as a
+  sanctioned exception.
+- **Up to twelve cells workers per wave** (was six), fewer when the host or a router caps
+  concurrent jobs.
+- **Planning batches decision agents.** They go out one round at a time with questions
+  batched per role, the main thread never waits idle on a round, and each return answers
+  per item with a `needs:` line for anything another role must settle first. Triage greps
+  the plan's decision log before briefing a question again, and effort, model and provider
+  come from the session mapping or the host's or router's role config, never from a brief.
+
 ## Changes in v7.2.0
 
 Compatibility decision: **non-breaking minor: five run rules from a plan-run retro; no

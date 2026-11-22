@@ -438,10 +438,14 @@ a minute or two as no difference.
 118 hops for an earlier plan revision (`5753017a`). The same trace prompt, run as one plain Claude subagent
 on the copied inputs, took 23.6 minutes. It made 73 calls, read 316 KB and used 11.8 M input tokens, with no
 compactions. Its first write came at 17.4 minutes, and it wrote 39 cards and 75 hop lines (136 frames,
-5 workers) for plan `a91a8032`. Plan Rev 6 had removed two screens, so the two inventories do not compare
-one to one. Either way the trace sits on the critical path for 17–24 minutes, without compacting. One run
-supports no rule, so nothing changed. A trace that took longer would be worth splitting by app (one worker
-per app, with one author merging the ids), which the one-author rule in §1 would then have to allow.
+5 workers) for plan `a91a8032`. The live `_ids.md` for that same plan holds 62 active cards and 118 hop
+lines (327 frames, 14 workers), grown from Codex's first draft through the run's revisions. So the Claude
+trace took longer and drew about two thirds of the cards. That is a coverage gap, and timing cannot show
+it. The trace sits on the critical path for 17–24 minutes without compacting, and how many edge cards it
+finds varies by worker. One run supports no rule, so nothing changed. Codex's own first draft (60 cards)
+is the closer baseline and gives about the same ratio. A trace that took longer would be worth splitting
+by app (one worker per app, with one author merging the ids), which the one-author rule in §1 would then
+have to allow.
 
 **What would change this.** At a 96 K start the compaction loop comes back, and T was never measured there.
 Rerunning B against T from a session in the project where previewing runs, with that session's

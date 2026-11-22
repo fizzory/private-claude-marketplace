@@ -604,6 +604,20 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
 
+## Changes in v7.4.0
+
+Compatibility decision: **non-breaking minor: measurements only, no rule change; no
+workflow-state change** (part of #13, items 4–6).
+
+- **Cells-worker cost measured on copied inputs, and no rule changed.** From a 48 K start
+  context, a w8 cells worker on the current brief finished 29 frames in 22.6 minutes with no
+  compaction. For a cells worker starting there, drawing Before from `_trace.md`, reading its
+  inputs by heading and smaller packs saved no time, so the brief, the trace and the 30-frame
+  pack stay as they are. The earlier 69-minute run started at 96 K, which the session's own
+  instructions and the host's tools filled, and its re-reading came from compaction.
+  `skills/previewing/references/rationale.md` → "Cells-worker cost re-measured: the start
+  context decides (issue #13 items 4–6)" has the table and the trace worker's own time.
+
 ## Changes in v7.3.0
 
 Compatibility decision: **non-breaking minor: previewing reads big files by heading, a

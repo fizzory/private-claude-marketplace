@@ -376,15 +376,78 @@ router or other external tool, so previewing behaves the same with or without on
 one slice (`w8`: S4a h3, S5 h3/h5/h6) as a Claude subagent with agt roles off, old brief against slice
 brief, both stopped unfinished at 68.9 minutes:
 
-| Brief | Tool calls | Tool-result bytes | Input tokens | Compactions |
+| Brief | Tool calls | Tool-result bytes | Input tokens | Compactions (time) |
 |---|---|---|---|---|
-| Old (whole files) | 278 | 1.34 MB | 42.8 M | 20 |
-| One-file slice | 238 | 2.05 MB (1.13 MB = 36 re-reads of the slice) | 37.3 M | 26 |
+| Old (whole files) | 278 | 1.34 MB | 42.8 M | 10 (20.2 min) |
+| One-file slice | 238 | 2.05 MB (1.13 MB = 36 re-reads of the slice) | 37.3 M | 13 (25.6 min) |
 
-The slice was re-read after every compaction, which cancelled what it saved, and both runs spent 105–123
-calls re-reading `$BASE` source the trace had already covered. In the live run Codex finished that same
-slice in 66 calls, 2.7 M tokens and 7 minutes. The per-worker cost is the worker's own re-tracing and its
-pack size, not how its inputs are laid out.
+(An earlier count read each compaction twice and recorded 20 and 26.) The slice was re-read after every
+compaction, which cancelled what it saved, and both runs spent 105–123 calls re-reading `$BASE` source the
+trace had already covered. In the live run Codex finished that same slice in 66 calls, 2.7 M tokens and 7
+minutes. The next section re-measured this from a smaller starting context and found the re-reading came
+from compaction, not from the brief.
 
-**Not addressed here:** the trace worker's own time, cells workers re-tracing `$BASE`, and the 30-frame
-pack size. Smaller packs, or one card per worker, are the next lever to measure.
+## Cells-worker cost re-measured: the start context decides (issue #13 items 4–6)
+
+**Measured 2026-11-22. No rule changed.** Items 4–6 of #13 asked whether cells workers should read slices,
+draw Before from `_trace.md` instead of `$BASE`, or take smaller packs. On copied inputs none of the three
+saved time, so the brief, the 30-frame pack and the trace stay as they are.
+
+**What the 69-minute run really measured.** Its worker's first turn was already 95.8 K input tokens, before
+it read anything, and it compacted near 195 K. Nothing in that start came from mentor. Most of it was the
+session's own instructions (the project `CLAUDE.md`, 46.6 KB, and the project memory, 17 KB) and the
+desktop host's tool schemas, which ship in every subagent. That left about 100 K of working room, less than
+the pack's inputs, so the worker compacted, lost the code it had read and read it again: 10 compactions and
+20.2 of its 69 minutes. It made 130 `$BASE` calls in all, of which only about the 20 a worker makes
+without compacting (next table) were needed; the rest, and most of its 1.34 MB of tool results, came from
+that loop.
+
+**The same slice from a 48 K start.** These were four plain Claude Code subagents (`general-purpose`, Opus,
+no router), run at the same time on copies of the same inputs: plan `a91a8032`, `_ids.md`, `_trace.md`,
+`_brief.md` and `$BASE` `a7787368a7a8`. Each worker's first turn was 47.9–48.2 K tokens. Arm B is the old
+brief. Arm T adds one section to it: read `_trace.md`, `_ids.md` and the plan by heading with
+`md-slice.sh`, draw Before from the trace, and open `$BASE` only at a `file:symbol` that the trace or
+`_ids.md` names, with no directory-wide search. Arms C and TC are B and T cut down to the S5 family (S5
+h3/h5/h6, S5b, S5c, S5d).
+
+| Arm | Pack | Wall | Calls | Result bytes | Input tokens | `$BASE` calls (bytes) | Compactions | First write | Self-check untraced / unspecified |
+|---|---|---|---|---|---|---|---|---|---|
+| B old brief | w8, 29 frames | 22.6 min | 57 | 303 KB | 10.2 M | 20 (112 KB) | 0 | 11.5 min | 7 / 16 |
+| T trace-first | w8, 29 frames | 23.4 min | 73 | 343 KB | 14.5 M | 22 (104 KB) | 0 | 13.0 min | 20 / 7 |
+| C old brief | S5 family, 11 frames | 17.0 min | 63 | 319 KB | 9.4 M | 20 (91 KB) | 0 | 9.5 min | 4 / 5 |
+| TC trace-first | S5 family, 11 frames | 16.9 min | 64 | 233 KB | 9.1 M | 18 (60 KB) | 0 | 8.6 min | 16 / 3 |
+
+All four finished, wrote every file and passed their own recount. Each arm ran once, so read a difference of
+a minute or two as no difference.
+
+- **Item 4, whole inputs.** Nothing compacted, so nothing was read twice. Arm B read about 300 KB in all,
+  and that is not where its time went.
+- **Item 5, re-tracing `$BASE`.** It costs about 20 calls and 100 KB, and pointing the worker at the trace
+  did not cut it. Most of the extra untraced marks in T and TC are role names: B drew them as runtime
+  placeholders, and T marked them untraced. That is a different label, not lost information. The stronger
+  reason to drop the change came from T itself. `_trace.md` was written before plan rows 65–92 existed, so a
+  worker that trusts it draws text the plan has since replaced. The trace is pinned once, while `$BASE` and
+  the plan are the sources of record.
+- **Pack size.** Eleven frames took 17.0 minutes and twenty-nine took 22.6. Every arm's first write came
+  8.6–13 minutes in, so reading the inputs is a fixed cost that splitting would multiply. For the live page
+  (327 frames, 14 workers at 30 frames or fewer): 2 waves of twelve at about 23 minutes each is about 46
+  minutes. Packs of about 11 frames need about 30 workers: 3 waves at about 17 minutes each is about 51
+  minutes. That is no gain, so the cap stays at 30.
+
+**Item 6, the trace worker.** In the live run Codex traced in 16.9 minutes (1,014 s). It wrote 60 cards and
+118 hops for an earlier plan revision (`5753017a`). The same trace prompt, run as one plain Claude subagent
+on the copied inputs, took 23.6 minutes. It made 73 calls, read 316 KB and used 11.8 M input tokens, with no
+compactions. Its first write came at 17.4 minutes, and it wrote 39 cards and 75 hop lines (136 frames,
+5 workers) for plan `a91a8032`. The live `_ids.md` for that same plan holds 62 active cards and 118 hop
+lines (327 frames, 14 workers), grown from Codex's first draft through the run's revisions. So the Claude
+trace took longer and drew about two thirds of the cards. That is a coverage gap, and timing cannot show
+it. The trace sits on the critical path for 17–24 minutes without compacting, and how many edge cards it
+finds varies by worker. One run supports no rule, so nothing changed. Codex's own first draft (60 cards)
+is the closer baseline and gives about the same ratio. A trace that took longer would be worth splitting
+by app (one worker per app, with one author merging the ids), which the one-author rule in §1 would then
+have to allow.
+
+**What would change this.** At a 96 K start the compaction loop comes back, and T was never measured there.
+Rerunning B against T from a session in the project where previewing runs, with that session's
+instructions and tools loaded, settles whether reading by heading pays off once a worker is short of room.
+The lever is the host's subagent start context, which mentor cannot set.

@@ -321,8 +321,9 @@ and save its block to `verdicts/after-merge.md`. Every earlier grade ended befor
 merge, so this is the only check that post-merge plan clauses actually happened. Its
 `[GOAL]` gaps go into the Done review's Leftovers; it never re-plans or reverts. Replace
 the Done review's `Post-merge steps:` line (Step 4) with the verdict and its path. When
-the merge landed in this session but the grade does not run (a paused walk, or a
-post-merge run the walk depends on that came back red), replace it with `Post-merge steps: not independently graded
+the merge landed in this session but the grade does not run (for example a paused
+walk, or a post-merge run the walk depends on that came back red, was never found, or
+ended its watch without a result), replace it with `Post-merge steps: not independently graded
 (<reason>)`, so the review never implies a check that did not run.
 
 ## Done when

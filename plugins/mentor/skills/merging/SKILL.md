@@ -263,7 +263,9 @@ a release tag or the deploy tool; the merge's first parent when none is known, s
 in the question), because a release can carry other
 people's commits and the user should not have to ask what goes out. Log a row per
 line (`PASS`, `paused`, or `FAIL`). Rollback lines are shown, never run, unless the human
-asks. Inside a plan run Step 4 already set `implemented`, so a paused After-merge line
+asks or a deployment-playbook phase gate breaches under a deploy grant. When the plan also selected the deployment playbook, run each deploy line under its
+§6 Run rules (anchor, pre-phase grade, bake, gate grade), and under a deploy grant a safe
+line proceeds without the pause above. Inside a plan run Step 4 already set `implemented`, so a paused After-merge line
 leaves the state `implemented` and goes into the Done review's Leftovers.
 
 Only on the **"Merge now"** branch, and only after Step 5's bookkeeping is durable — an

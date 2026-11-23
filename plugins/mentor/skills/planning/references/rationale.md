@@ -248,3 +248,29 @@ that matters (the tracked tree is unchanged, proved by matching `git status --po
 before and after) while letting caches, temp directories and runner-made fixtures be
 written. It is the default for compiled grades because the brief writer otherwise has
 to remember it every time. Source: issue #11 item 5.
+
+## Deployment — why autonomous production needs a scoped grant and per-phase grades
+
+The user asked for a playbook that always plans a safe rollout and, when the rollout is
+safe, lets agents deploy to production without waiting. Safe means three checkable
+properties: zero downtime, backward compatibility, and zero user interruption. Mentor's
+core concept allows only the constitution to lift an always-pause item, and "Deploys and
+production configuration changes" is on the built-in list. So the playbook does not lift
+it. A constitution **deploy grant** does, using the same pattern as the merge grant. The
+owner chose this (2026-11-22) over letting plan approval alone authorise a production
+deploy, which would have needed an amendment to the pinned core concept.
+
+The grant is conditional and scoped, not a blanket removal. A line that removed the
+whole item would let an unsafe deploy through, which is the opposite of what was asked.
+Scoping it to services and environments keeps a grant written for one service from
+covering another.
+
+A fresh verifier grades each phase, both before deploying and after its bake window,
+rather than grading once at the end. In production a failed check is user-visible
+damage, not a red test, so the independent grader (core concept rule 5) has to stand
+between phases. A self-graded phase cannot use the grant for the same reason.
+
+Rollback to the captured prior version is inside the grant. Without it, a breached gate
+would leave production broken while it waited for a human. Fixing forward is not inside
+the grant: a new deploy after a failure is an unplanned change, so it goes through
+re-planning.

@@ -169,6 +169,7 @@ resolve in both inline and next-line `## Playbook` formats without rewriting old
 | [investigation](skills/planning/references/playbooks/investigation.md) | Produce a read-only cited answer. Label claims measured, inferred or guess; write only the plan's evidence and deliverable, and ship nothing. |
 | [hillclimb](skills/planning/references/playbooks/hillclimb.md) | Improve a named metric through one change → one measurement → keep or revert. Done requires the target AND at least N logged attempts within approved caps; software-change owns delivery when combined. |
 | [prototype](skills/planning/references/playbooks/prototype.md) | Deliver prototype variants and observed comparison evidence so the human can pick. Select only when the prototype itself is the plan goal, never for a mid-plan fork; never ship prototype code. |
+| [deployment](skills/planning/references/playbooks/deployment.md) | Plan a rollout as safe phases (zero downtime, backward compatible, zero user interruption) using canary, blue-green, rolling, flags and expand/contract; grade every phase gate independently and roll back on a breach. Production phases deploy unpaused only under a scoped constitution **deploy grant**; otherwise each pauses. |
 
 ## Runtime contracts
 
@@ -603,6 +604,24 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_OPENER` | `auto` (default) · `vscode` · `chrome` · `system` |
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
+
+## Changes in v7.5.0
+
+Compatibility decision: **non-breaking minor: a new planning playbook and an opt-in
+constitution grant; existing plans and constitutions behave as before.**
+
+- **A deployment playbook.** Planning now loads
+  `skills/planning/references/playbooks/deployment.md` when the deliverable is a rollout.
+  It plans every rollout as safe phases (zero downtime, backward compatible, zero user
+  interruption), splitting into several deploys when that is safer, and has a fresh
+  verifier grade each phase before and after its bake window. A breached gate rolls back
+  to the captured prior version and pauses.
+- **Deploy grant.** A constitution line that lifts "Deploys and production configuration
+  changes" for safe phases, scoped to services and environments, lets those phases
+  deploy to production without pausing; release tags, deploy config and additive
+  migrations lift only when the line names them too. Without it every production phase
+  pauses, as before. Why: `skills/planning/references/rationale.md` → "Deployment — why autonomous
+  production needs a scoped grant and per-phase grades".
 
 ## Changes in v7.4.0
 

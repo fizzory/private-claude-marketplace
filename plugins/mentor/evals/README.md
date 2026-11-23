@@ -5,7 +5,7 @@ user's phrasing reaches the skill it should, and avoids its six siblings.
 
 Mentor ships seven user-facing skills (`planning`, `grilling`, `previewing`, `merging`,
 `shipping`, `constitution-authoring`, `frontend-self-ex-review`). Planning reads
-five playbooks (software-change, retrospective, investigation, hillclimb and prototype) as references through
+six playbooks (software-change, retrospective, investigation, hillclimb, prototype and deployment) as references through
 [`skills/planning/references/playbooks.md`](../skills/planning/references/playbooks.md).
 Both forward planning and single-session retrospective requests must select `planning`;
 reference selection happens within that flow. Other collisions still matter, such as
@@ -132,8 +132,8 @@ History to recheck: [2]
 ```
 
 Allowed owners are exactly `none`, `general`, `general flow` (an explicit alias for
-`general`), `software-change`, `retrospective`, `investigation`, `hillclimb`, or
-`prototype`. JSON has exactly the two shown keys; history is an array of distinct positive
+`general`), `software-change`, `retrospective`, `investigation`, `hillclimb`,
+`prototype`, or `deployment`. JSON has exactly the two shown keys; history is an array of distinct positive
 integer step numbers. The labeled history also accepts exactly `none` or `nothing` for
 `[]`, and its array must fit on one line. Each field occupies its whole line with no
 explanation or punctuation after the value. No unlabeled continuation may follow a field;

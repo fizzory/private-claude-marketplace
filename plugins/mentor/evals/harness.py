@@ -21,7 +21,7 @@ SKILLS = ["planning", "grilling", "previewing", "merging", "shipping",
           "constitution-authoring", "frontend-self-ex-review"]
 INDEX = "planning/references/playbooks.md"
 PLAYBOOKS = {f"planning/references/playbooks/{name}.md" for name in
-             ("software-change", "retrospective", "investigation", "hillclimb", "prototype")}
+             ("software-change", "retrospective", "investigation", "hillclimb", "prototype", "deployment")}
 DELIVERY_OWNERS = {name: name for name in
                    ("none", "general", *(Path(path).stem for path in PLAYBOOKS))}
 DELIVERY_OWNERS["general flow"] = "general"
@@ -53,7 +53,7 @@ The marker may appear anywhere in your final message, fenced or not. Use exactly
 these two JSON keys. Replace [] with a JSON array of positive, distinct step numbers
 only when inherited steps need re-checking. The allowed owner values are exactly:
 none, general, general flow (an alias for general), software-change, retrospective,
-investigation, hillclimb, prototype. Use one exact value, without explanation.
+investigation, hillclimb, prototype, deployment. Use one exact value, without explanation.
 Alternatively finish with these two whole labeled lines:
 Delivery owner: <owner>
 History to recheck: []

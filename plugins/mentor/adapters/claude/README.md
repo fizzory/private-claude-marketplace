@@ -46,8 +46,9 @@ and the references matching the requested plan deliverable:
 [software-change](../../skills/planning/references/playbooks/software-change.md),
 [retrospective](../../skills/planning/references/playbooks/retrospective.md),
 [investigation](../../skills/planning/references/playbooks/investigation.md),
-[hillclimb](../../skills/planning/references/playbooks/hillclimb.md) and
-[prototype](../../skills/planning/references/playbooks/prototype.md).
+[hillclimb](../../skills/planning/references/playbooks/hillclimb.md),
+[prototype](../../skills/planning/references/playbooks/prototype.md) and
+[deployment](../../skills/planning/references/playbooks/deployment.md).
 Each fills the five required overlay slots and also supplies optional Run rules.
 Each keeps its own Host portability fallback.
 These are references within planning; Mentor still exposes

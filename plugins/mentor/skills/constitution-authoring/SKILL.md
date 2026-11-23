@@ -58,7 +58,16 @@ software playbook adds force-push, protected branches, and merging, for example.
 The lists are a union: nothing removes an item (default or playbook) except a
 line in the constitution's Always-pause list that names and removes it. That is
 the only way to lift one, and `merging` reads such a line for merging as a
-**merge grant**. Decision authority covers reversible calls only.
+**merge grant**. A **deploy grant** is the deployment playbook's conditional form: it
+names each item it lifts (the built-in deploy item and, when the rollout needs them,
+release tags and deploy config, never CI secrets, and additive data migrations), lifts
+them only for rollout phases that pass the safe-deploy check, and scopes them to named
+services and environments — e.g. `- Deploys and production configuration changes;
+release tags and deploy config (not CI secrets); additive data migrations — deploy
+grant: lifted for deployment-playbook phases whose safe-deploy check passed, for the
+actions each phase names. Scope: services api, web; environments staging, prod.` Write
+it only when the user asks; never lift the whole item.
+Decision authority covers reversible calls only.
 
 **Mid-run product calls.** After approval, a reversible product call goes to a
 decision-maker agent and is logged `review?: needed`; it never pauses. Always-pause

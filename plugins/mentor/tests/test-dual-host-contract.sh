@@ -61,7 +61,7 @@ assert len(mapped_skills) == len(set(mapped_skills))
 
 references = root / "skills" / "planning" / "references"
 playbooks = references / "playbooks"
-new_playbook_names = ("investigation", "hillclimb", "prototype")
+new_playbook_names = ("investigation", "hillclimb", "prototype", "deployment")
 playbook_names = ("software-change", "retrospective", *new_playbook_names)
 overlays = [playbooks / f"{name}.md" for name in playbook_names]
 slots = (
@@ -120,6 +120,13 @@ for declaration in ("baseline and noise floor", "Before approval", "maximum atte
 prototype = (playbooks / "prototype.md").read_text()
 for declaration in ("goal is the prototype itself", "mid-plan fork", "previewing", "Name the decision", "observed comparison evidence", "Never ship prototype code"):
     assert declaration in prototype, declaration
+
+index_text = (references / "playbooks.md").read_text()
+deployment = (playbooks / "deployment.md").read_text()
+for declaration in ("**Zero downtime**", "**Backward compatible**", "**Zero user interruption**", "**deploy grant**", "`safe: no`", "sole delivery owner", "A gate breach rolls back and stops", "never covers secrets"):
+    assert declaration in deployment, declaration
+for exclusion in ("fix to a deploy script",):
+    assert exclusion in index_text, exclusion
 
 resources = ("evidence-graph", "lens-judgment", "lens-tooling", "lens-divergent", "synthesizer", "rationale", "pr-body")
 for name in resources:

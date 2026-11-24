@@ -330,16 +330,18 @@ when `files=` is non-zero; exit **2** plus a `NOTHING-SEARCHED` line means it re
 at all and its silence is not evidence.
 
 **Verify literal CLI commands, and claims about a live system's current state, before
-drafting them into the plan.** A deploy/release-shaped step that types an exact command
-from memory or a runbook paraphrase otherwise gets its first real syntax check when it
-runs verbatim against a live system. Before
-writing a literal command into such a step, verify it (`--help`, `--dry-run`, or the
-tool's own docs) rather than transcribing it as fact. The same applies to claims about
-the deploy target's current state (backups exist, a version is what you think it is,
-a rollback path works): verify it this session, or write it as conditional on a named,
-mandatory verification command, with the fact stated as unverified rather than asserted —
-an external-state claim nobody re-checked reads as fact to whoever runs the step. A step
-with no captured pre-change state has no rollback anchor either way.
+drafting them into the plan.** Verify a deploy/release-shaped step's literal command
+with `--help`, `--dry-run`, or the tool's own docs; verify the deploy target's current
+state (backups, version, rollback path) this session and capture its pre-change state
+as the rollback anchor. Treat a premise about the user's own environment — which clients
+or hosts they use, and whether the input the design reads is produced there — as a
+live-system claim: observe it in that environment before approval, for example by
+counting which clients produced their recent sessions. A process tree shows how a
+process started, not which features run in it; check input production directly.
+State any live-system claim not verified this session—including deploy-target state
+and user-environment premises—as unverified, name its mandatory verification check,
+and make dependent steps conditional on that check. These checks
+keep untested syntax and environment assumptions from becoming asserted facts in a live run.
 
 **A fast-moving vendor/product/SDK topic goes to the reference skill before it goes to
 memory.** When a research topic names an external platform, SDK, or cloud service that a
@@ -668,6 +670,11 @@ Required sections, in order:
     ("`scripts/check` exits 0", "the brief covers all 5 regions, each with a cited
     source"). Shape it from the constitution's Definition of done and the
     playbook's overlay. The run is done only when a verifier grades it PASS.
+    Map each clause of the plan-level `Goal:` line to the part of the Goal check that
+    measures it on the real deliverable. Name any clause no check can measure before
+    merge (for example, only the user's own setup can show it) as unmeasured in Step 6's
+    approval and log a `review?: needed` row. This keeps an unchecked goal promise
+    visible when the measured parts pass.
 12. `## Decision log` — one flat table, appended to for the life of the plan:
 
     ```
@@ -678,8 +685,8 @@ Required sections, in order:
     `result` is one of `kept` (human answered) · `decided` (agent decided) · `PASS` ·
     `FAIL` (a verifier grade) · `paused` · `resumed` · `failed`. `review?` is `needed`
     for a paused row, a deviation from the plan, a mid-run product call decided by an
-    agent, or a re-plan — `optional` otherwise. Append every Step 3 resolution as it
-    lands; the run appends the rest. The flat table is canonical: grouping by use
+    agent, a re-plan, or an unmeasured Goal clause — `optional` otherwise. Append every
+    Step 3 resolution as it lands; the run appends the rest. The flat table is canonical: grouping by use
     case happens only when it is rendered for review (After Proceed → Done review).
 
 **Visualization decision rule (pick exactly ONE idiom per artifact):**
@@ -927,6 +934,13 @@ bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" set <slug> impl
 bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" set <slug> failed --note "<what broke>"
 ```
 
+**Wait for delegates.** When every next action depends on background delegates, hold
+the turn with one bounded blocking call — the host's monitor or task-wait tool, or the
+delegate tool's own bounded wait — and repeat that call until the result lands. Follow
+merging → **Step 2 — One bounded watch**'s ban on background sleeps and poll loops.
+Keep the turn active so the run continues without depending on a host's stop/resume
+behavior.
+
 **Keep a step's own body on `-` bullets.** The step counter cannot tell a numbered
 sub-item from a step, and an inflated denominator strands a finished plan at
 `in_progress` forever.
@@ -945,10 +959,15 @@ outside edits (rationale: `references/rationale.md` → **Plan-file continuity �
 drafts, feedback, and tracked writes**).
 
 1. `set <slug> in_progress`. Build steps in order.
-2. **Grade every step independently.** When a step looks done, dispatch one fresh
-   verifier with the plan-level Goal: first, then the step's `Goal:` and `Done when:`
-   per `references/verifier-contract.md`.
-   Resolve its settings through Role resolution and wait for the returned block; save it
+2. **Grade every step independently.** When a step looks done, check the selected
+   playbooks' **Run rules** for an action due before this grade (software-change §6's
+   cleanup before the last implementation step's first grade, or a UI step's
+   self-explanation audit), and run it first. This keeps a pre-grade action attached
+   to the grade it precedes after a resume.
+   Then dispatch one fresh verifier with the plan-level Goal: first, then the step's
+   `Goal:` and `Done when:` per `references/verifier-contract.md`.
+   Resolve its settings through Role resolution and wait for the returned block using
+   **Wait for delegates** above; save it
    verbatim to `verdicts/step-N.md`, overwriting the previous grade. On PASS, append
    decision `Step N graded`, evidence
    `verdicts/step-N.md · <grading> · <author>/<verifier> family`, result `PASS`; then run
@@ -979,9 +998,10 @@ drafts, feedback, and tracked writes**).
    report the verdict line below with its one question underneath, and on the answer
    write `resumed` and continue.
 6. When every step is ticked, dispatch the `## Verification` topics (one fresh
-   verifier each), wait and save each returned block verbatim to `verdicts/topic-N.md`;
+   verifier each), wait using **Wait for delegates** above and save each returned block
+   verbatim to `verdicts/topic-N.md`;
    write the **Done review** below, then dispatch the **Goal check** verifier with it,
-   wait and save its block to `verdicts/goal.md` per the same contract. Saving each
+   wait using **Wait for delegates** above and save its block to `verdicts/goal.md` per the same contract. Saving each
    grade separately keeps failures visible on resume. A FAIL re-enters step 3's
    re-plan path for the step that owns the gap.
 7. **Deliver.** Follow the single delivery owner chosen in Step 2, including the

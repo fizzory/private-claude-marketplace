@@ -1,14 +1,14 @@
 ---
 name: merging
 description: >
-  Watch a PR's CI checks, triage a failure once (flake vs regression vs a base branch
-  that was already broken), grade the PR with an independent verifier, and merge on
-  green — with the user's explicit go-ahead unless the constitution grants merge
+  Watch a PR's CI checks, triage a failure once (a job no runner started vs flake vs
+  regression vs a base branch that was already broken), grade the PR with an independent
+  verifier, and merge on green — with the user's explicit go-ahead unless the constitution grants merge
   authority, then walk the runbook's after-merge steps. User-invoked via /mentor:merge
   after /mentor:ship (or for any open PR on the current branch, mentor-made or not),
   and by planning's software-change playbook at the end of a plan run. Use when the user says "watch the PR and
   merge when green", "check CI and merge", "merge if checks pass", or "is this failure
-  even mine". GitHub-only (needs gh); one bounded watch, one rerun max, never a
+  even mine". GitHub-only (needs gh); one bounded watch, one rerun max outside a user-chosen capacity rerun window, never a
   busy-poll loop.
 ---
 
@@ -20,8 +20,8 @@ Use a structured question UI when the host offers one; otherwise ask the same fo
 
 This skill owns the tail of any open PR on the current branch, mentor-made or not: watch
 CI, work out **once** whether a failure is a flake, this diff's regression, or rot that
-was already on the base branch, and merge only when the user has said so or the
-constitution grants merge. It is a
+was already on the base branch, distinguish a job no runner started, and merge only
+when the user has said so or the constitution grants merge. It is a
 separate entry point on purpose — a shipping pass ends at "PR open", and re-running one
 to get a merge would re-run the simplify pass, the clean check, the tests and the push
 against work that is already up.
@@ -72,8 +72,10 @@ around it. That leaves three outcomes:
 - **The 10-minute ceiling hit first** (CI is simply longer than the tool allows) — do
   **not** start a second watch, which would burn another ten minutes to learn the same
   thing. Take one non-blocking `gh pr checks <number>` for current status, report it,
-  and offer auto-merge from Step 4: `--auto` hands the waiting to GitHub, which is the
-  right tool for CI that outlasts a turn.
+  and carry the pending checks forward through Steps 3.5–4 for grading and the
+  supported merge options; before Step 4 offers auto-merge, read
+  `gh api repos/{owner}/{repo} -q .allow_auto_merge` and offer **Auto-merge on green**
+  only when it is true. Auto-merge hands the waiting to GitHub when CI outlasts a turn.
 
 ## Step 3 — Triage a failure ONCE
 
@@ -128,6 +130,11 @@ proves nothing, a red streak since a datable commit proves the base was already 
 
 Then decide:
 
+- **No runner (capacity)** — the job was cancelled before any step ran: confirm with
+  an empty `--log-failed` and a jobs API result showing no runner and no steps, or a
+  check-run annotation saying no runner acquired it. Class it as neither a flake nor
+  a regression, spend no rerun, and carry it into Step 4. No code ran for that job,
+  so its result cannot grade the diff.
 - **Pre-existing (broken base)** — the same job fails the same way on `$base`, the streak
   predates this branch, and the diff touched no CI or environment files. **Don't spend the
   rerun**: it can only fail identically. Report both run URLs and the date the streak
@@ -186,13 +193,30 @@ the question text. **Every question stands on its
 own** — the user answers from the question screen alone, never sent to a file, a CI log, a
 check name, or an earlier turn to learn what the question means: when a failure is what
 they are deciding about, put the failing test's name and the one line that explains it in
-the question, not a link to the run.
+the question, not a link to the run. Name the PR by its full URL in the question, never
+a bare `#N`, which the client may link to another repository.
+
+Read `gh api repos/{owner}/{repo} -q .allow_auto_merge` before offering auto-merge;
+include **Auto-merge on green** only when it is true. Offer ordinary **Merge now** only
+with green checks; with checks pending, offer supported **Auto-merge on green** or
+**Leave open**, except for the capacity and broken-base options below. This keeps the
+question's options executable on this repository.
 
 - **Merge now** — `gh pr merge <number> --squash` (match the repo's convention if it
   clearly uses merge/rebase instead).
 - **Auto-merge on green** — `gh pr merge <number> --auto --squash`: GitHub merges when
   checks pass, no further watching needed; end the session after confirming it queued.
 - **Leave open** — report status and stop.
+
+**On a `no runner (capacity)` verdict, offer exactly these three options:**
+**Keep rerunning** — spaced reruns within a window the user sets; **Merge anyway** —
+stating plainly that no code ran for that job; and **Leave open**. Run a schedule only
+after the user chooses it. The user-chosen capacity schedule is the explicit exception
+to the normal watch/rerun budget; use bounded native waits between spaced attempts,
+without sleep/poll loops. Continue only while the result remains no-runner and the
+window remains open; green proceeds through independent grading, an executed failure
+returns to Step 3, and window exhaustion leaves the PR open. A capacity wait needs the
+user's chosen window rather than a speculative retry by the skill.
 
 **On a `pre-existing (broken base)` verdict the option set changes**, because the PR
 cannot reach green by waiting: drop **Auto-merge on green** (it would queue forever) and
@@ -334,11 +358,17 @@ ended its watch without a result), replace it with `Post-merge steps: not indepe
   state through at most one watch + one rerun + one more watch, any regression was
   reported with the failing test named, and a merge happened only through the user's
   explicit choice or a constitution merge grant (logged) — or the PR was left open with
-  its status stated plainly.
-- A red check was sorted into flake / regression / **pre-existing (broken base)** before
+  its status stated plainly. A user-chosen capacity rerun schedule is the explicit
+  exception to that watch/rerun budget: bounded native waits between spaced attempts,
+  without sleep/poll loops, only while the result remains no-runner and the window is
+  open. Green proceeds through independent grading, an executed failure returns to
+  Step 3, and window exhaustion leaves the PR open.
+- A red check was sorted into **no runner (capacity)** / flake / regression /
+  **pre-existing (broken base)** before
   the rerun was spent, using the base-branch run history and the CI-file diff — and a
   pre-existing verdict reached Step 4 as its own option set, with the base fix named
-  plainly in the report as leftover work, never as a third dead end.
+  plainly in the report as leftover work, never as a third dead end. A no-runner verdict
+  spent no rerun and reached Step 4's capacity option set.
 - A landed merge added the `merged:` note. Standalone, it also closed the plan's state as
   `implemented` on the user's say-so; inside a plan run the run had already set
   `implemented` (either way, in every state but `superseded`). With no plan matching the

@@ -118,7 +118,8 @@ Cross-topic:
 
 - **`FAIL` iff at least one `[GOAL]` gap exists**, a check was weakened, or the
   evidence review lists a scenario. `[NON-GOAL]` gaps never fail a grade; they
-  become decision-log rows marked `review?: optional`.
+  become decision-log rows marked `review?: optional` (an unmeasured Goal clause keeps
+  `review?: needed`; see **What the orchestrator does with it**).
 - **`HANDBACK`** is a verdict on the brief, not the work: the check itself is broken,
   unrunnable, or larger than what was handed over. Report what you did check and list
   the remainder. It costs the step none of its retry budget.
@@ -142,6 +143,8 @@ Cross-topic:
 The caller decides what a verdict triggers: planning → "After Proceed" for a step,
 topic, or Goal check (topics and Goal checks never tick a step), and merging →
 "Step 3.5" for a merge and "Step 6" for the After-merge grade.
+For an unmeasured Goal clause, reference its existing `review?: needed` row or append
+one if absent—even for a `[NON-GOAL]` stamp—and name the clause in the merge question.
 **HANDBACK** is a verdict on the brief: repair the brief or the check and re-dispatch
 fresh, with the remainder as its inputs. It costs no retry (merging caps it at one
 repair per PR).

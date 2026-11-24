@@ -134,7 +134,7 @@ another host, invoke the matching skill or describe the same intent naturally.
 | `/mentor:retro [session]` | **Retrospective of a finished session** — rebuilds the session from disk (even across compactions, Claude/Codex subagents and agt workers), runs three lenses and a synthesizer, applies accepted skill changes, and opens one PR/MR per repository without plan approval. Resumes its own saved retro; refuses another active/paused run or a live own/legacy gate, leaving that gate untouched. Missing `jq` stops entry. Changes without available delivery stay local and are reported; only a human merges. Offered after a completed run, never auto-started. `--claude-config` / `--codex-home` / `--agt-home` select transcript roots. |
 | `/mentor:preview [subject]` | **One scenario-based review page for a plan or any subject** — a repo subsystem, a doc, a mentor plan, or the thing under discussion; no plan file or planning session required. Draws only what the subject changes: a mockup of every surface each scenario reaches (each edge case its own card, Before/After per scenario), each sequence under the scenario that starts it, the C4 levels that move, the changed data and contracts, and the decisions; every card has a comment box with Copy, and open questions come back to chat one at a time. Writes `.mentor/reviews/<subject-slug>/review.html` (gitignored), opens it, and offers to publish it on Claude. `planning` Step 5 delegates here for an in-planning page. |
 | `/mentor:ship` | Finish the current branch: clean-check → `/simplify` → tests → push + auto-open PR/MR (or push to upstream). Standalone it asks; inside a plan run (the software playbook's deliver mode) it follows the plan's Definition of done and puts the Done review in the PR body. Never force-pushes. |
-| `/mentor:merge [PR#]` | The tail `/mentor:ship` leaves off: one bounded `gh pr checks --watch`, then one triage — flake (one rerun max) / regression (stop and report) / already broken on the base branch (don't spend the rerun; you choose **Merge anyway** or **Leave open**, and any leftover work is named in the report) — then an independent verifier grades the PR, and it merges only on your explicit choice (or under a constitution that grants merge), then walks the runbook's after-merge steps, pausing on always-pause lines, and inside a plan run has a fresh verifier grade that walk. GitHub-only. |
+| `/mentor:merge [PR#]` | The tail `/mentor:ship` leaves off: one bounded `gh pr checks --watch`, then one triage — no runner started the job (spends no rerun; you choose spaced **Keep rerunning** within a window you set, **Merge anyway**, or **Leave open**) / flake (one rerun max) / regression (stop and report) / already broken on the base branch (don't spend the rerun; you choose **Merge anyway** or **Leave open**, and any leftover work is named in the report) — then an independent verifier grades the PR, and it merges only on your explicit choice (or under a constitution that grants merge; **Auto-merge on green** is offered only when the repository allows auto-merge), then walks the runbook's after-merge steps, pausing on always-pause lines, and inside a plan run has a fresh verifier grade that walk. GitHub-only. |
 | `/mentor:grill [topic]` | One-question-at-a-time interview that sharpens a design's open decisions before you approve — also the route for a plan-quality review before approval. Asks only product calls; evidence- and constitution-settleable questions are settled without asking. Conversation only, pre-approval only. |
 | `/mentor:constitution [principles]` | Create/amend this repo's governing principles and autonomy contract (Always-pause list, Decision authority, Definition of done) at `.mentor/constitution.md` — versioned, committed, and honored by every plan and run. |
 
@@ -604,6 +604,22 @@ Knobs — set under `env` in `~/.claude/settings.json` (a shell `export` won't r
 | `MENTOR_PLAN_OPENER` | `auto` (default) · `vscode` · `chrome` · `system` |
 | `MENTOR_PLAN_VSCODE_BIN` | Force the VSCode CLI binary (default: auto-detect `code` / `cursor` / `windsurf` / …) |
 | `MENTOR_PLAN_OPEN=off` | Disable auto-open entirely |
+
+## Changes in v7.6.0
+
+Compatibility decision: **non-breaking minor: stronger planning and merge checks;
+existing plan artifacts and lifecycle state remain compatible.**
+
+- **Observe environment premises.** Verify which clients the user uses and whether
+  they produce the design's inputs before approval; name unverified premises and checks.
+- **Cover every Goal clause.** Map each promise to a real-deliverable check and surface
+  unmeasured clauses as required review at approval and merge.
+- **Wait for delegates.** Hold the turn with bounded host waits while background work runs.
+- **Run pre-grade actions first.** Check the selected playbooks' Run rules at each step's grade.
+- **Classify runner shortages.** A job no runner started spends no rerun; the user can
+  choose spaced retries within a window, merge anyway, or leave the PR open.
+- **Check auto-merge support.** Offer auto-merge only when the repository allows it.
+- **Link merge questions.** Name the PR by its full URL so the client opens the right repository.
 
 ## Changes in v7.5.0
 

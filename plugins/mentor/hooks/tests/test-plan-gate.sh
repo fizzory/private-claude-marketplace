@@ -59,9 +59,10 @@ LEGACY_MARKER="$PLANS_DIR/.planning"            # pre-upgrade repo-global marker
 trap 'rm -rf "$ROOT"' EXIT   # .mentor/ lives inside $ROOT, so this cleans everything
 
 PASS=0; FAIL=0
-run() { # expect cwd tool desc file_path
+run() { # expect cwd tool desc file_path [session]
   local expect="$1" cwd="$2" tool="$3" desc="$4" payload="$5" json rc=0 got
-  json=$(python3 -c 'import json,sys;print(json.dumps({"tool_name":sys.argv[3],"cwd":sys.argv[1],"tool_input":{"file_path":sys.argv[2]}}))' "$cwd" "$payload" "$tool")
+  json=$(jq -nc --arg cwd "$cwd" --arg file "$payload" --arg tool "$tool" --arg sid "${6:-}" \
+    '{tool_name:$tool,cwd:$cwd,session_id:$sid,tool_input:{file_path:$file}}')
   printf '%s' "$json" | bash "$HOOK" >/dev/null 2>&1 || rc=$?
   got="allow"; [ "$rc" = "2" ] && got="block"
   if [ "$got" = "$expect" ]; then
@@ -272,7 +273,28 @@ if count_eq 1 'Stale legacy planning marker' "$out"; then PASS=$((PASS+1)); echo
 else FAIL=$((FAIL+1)); echo "  FAIL missing/duplicated stale-legacy heal notice: $out"; fi
 rm -f "$MARKER" "$LEGACY_MARKER"
 
-: > "$MARKER"
+echo '== K. Running plan and verdict tool admissions =='
+managed="$PLANS_DIR/guarded"
+mkdir -p "$managed/verdicts"
+printf '{"state":"in_progress"}\n' > "$managed/.state.json"
+printf '# Managed\n' > "$managed/plan.md"
+printf 'slug=guarded\nstarted=fixture\n' > "$repo_root/.mentor/.run-old-owner"
+for artifact in plan.md verdicts/step-1.md step-1-verify.md topic-1-verify.md goal-verify.md; do
+  run block "$WTB" Edit "foreign session denied $artifact" "$managed/$artifact" fork
+  run allow "$REPO" Write "owner admitted $artifact" "$managed/$artifact" old-owner
+done
+run block "$ROOT" Write 'foreign tool cwd outside target repo is still denied' "$managed/plan.md" fork
+run allow "$WTB" Write 'independent worktree source remains available' "$WTB/src/app.ts" builder
+run allow "$WTB" Write 'evidence remains available' "$managed/evidence/probe.txt" builder
+if (cd "$REPO" && CLAUDE_CODE_SESSION_ID=new-owner bash "$(dirname "$HOOK")/plan-state.sh" begin-run guarded --takeover) >/dev/null 2>&1; then
+  PASS=$((PASS+1))
+else
+  FAIL=$((FAIL+1))
+  printf 'FAIL explicit transfer of guarded fixture\n'
+fi
+run block "$REPO" Edit 'old owner denied a new admission after transfer' "$managed/plan.md" old-owner
+run allow "$REPO" Edit 'replacement owner admitted after transfer' "$managed/plan.md" new-owner
+
 echo
 echo "RESULT: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = "0" ]

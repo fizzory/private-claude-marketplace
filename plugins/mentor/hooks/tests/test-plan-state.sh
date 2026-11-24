@@ -1357,6 +1357,252 @@ out="$(psout --help)"
 chk "help documents record-write" has 'record-write <slug>' "$out"
 chk "help documents drift" has 'drift <slug>' "$out"
 
+echo '== X3. Optional native helper fallback =='
+OPTIONAL="$ROOT/optional-hooks"
+mkdir -p "$OPTIONAL/lib"
+cp "$PLANSTATE" "$OPTIONAL/plan-state.sh"
+cp "$HOOKS/lib/state.sh" "$HOOKS/lib/run.sh" "$OPTIONAL/lib/"
+optional_ps() { (cd "$REPO" && _env bash "$OPTIONAL/plan-state.sh" "$@" 2>&1); }
+out="$(optional_ps start optional-fallback)"; rc=$?
+chk 'missing run.py still permits hookless durable start' test "$rc" = 0
+plan optional-fallback '# fallback' '## Implementation steps' '1. first'
+out="$(optional_ps set optional-fallback in_progress)"; rc=$?
+chk 'missing run.py still permits hookless lifecycle writes' test "$rc" = 0
+out="$(optional_ps begin-run optional-fallback)"; rc=$?
+chk 'missing run.py and no identity keep prose continuation usable' test "$rc" = 0
+printf 'slug=optional-fallback\n' > "$REPO/.mentor/.run-optional-live"
+optional_before="$(cksum "$PLANS/optional-fallback/.state.json" "$REPO/.mentor/.run-optional-live")"
+out="$(optional_ps set optional-fallback failed)"; rc=$?
+chk 'missing run.py refuses writes when run files exist' test "$rc" = 1
+chk 'missing-helper refusal preserves existing artifacts' test "$(cksum "$PLANS/optional-fallback/.state.json" "$REPO/.mentor/.run-optional-live")" = "$optional_before"
+out="$(optional_ps query --slug optional-fallback --format count)"; rc=$?
+chk 'missing run.py leaves readers usable' sh -c '[ "$1" = 0 ] && [ "$2" = 1 ]' sh "$rc" "$out"
+rm -f "$REPO/.mentor/.run-optional-live"
+
+echo '== Y. Managed writes revalidate the live run owner =='
+RUN_STATE="$REPO/.mentor"
+rm -f "$RUN_STATE"/.run-*
+plan owner-write '# owned' '## Implementation steps' '1. first' '2. second' '## Goal check' 'Independent goal check remains.'
+ps init owner-write >/dev/null
+ps set owner-write in_progress >/dev/null
+saved_pass owner-write 1
+saved_pass owner-write 2
+ps_sess owner begin-run owner-write >/dev/null
+printf 'latch' > "$RUN_STATE/.run-owner.idle"
+printf 'pending' > "$RUN_STATE/.run-owner.wait"
+printf 'pointer' > "$RUN_STATE/.run-owner.ptr"
+# Companion contents must never be treated as another owner, even if they contain
+# marker-shaped task text.
+printf 'slug=owner-write\n' > "$RUN_STATE/.run-owner.wait"
+artifact_snapshot() { python3 - "$RUN_STATE" <<'SNAP'
+import hashlib,pathlib,sys
+root=pathlib.Path(sys.argv[1])
+for path in sorted(root.rglob('*')):
+    if path.is_file():
+        print(path.relative_to(root), hashlib.sha256(path.read_bytes()).hexdigest(), path.stat().st_mtime_ns)
+SNAP
+}
+refused_write() {
+  local actor="$1"; shift
+  local before output code
+  before="$(artifact_snapshot)"
+  output="$(ps_sess "$actor" "$@")"; code=$?
+  [ "$code" != 0 ] && [ "$(artifact_snapshot)" = "$before" ]
+}
+for actor in foreign ''; do
+  chk "${actor:-missing identity}: set refuses with byte-identical artifacts" refused_write "$actor" set owner-write failed --note overwrite
+  chk "${actor:-missing identity}: tick refuses with byte-identical artifacts" refused_write "$actor" tick owner-write 1
+  chk "${actor:-missing identity}: hash recording refuses with byte-identical artifacts" refused_write "$actor" record-write owner-write
+  chk "${actor:-missing identity}: init cannot restamp ownership" refused_write "$actor" init owner-write --group changed
+  chk "${actor:-missing identity}: ensure-dir cannot restamp ownership" refused_write "$actor" ensure-dir "$PLANS/owner-write"
+  chk "${actor:-missing identity}: nested ensure-dir cannot bypass owner" refused_write "$actor" ensure-dir "$PLANS/owner-write/verdicts/new-dir"
+  chk "${actor:-missing identity}: start cannot restamp ownership" refused_write "$actor" start owner-write
+  chk "${actor:-missing identity}: deps refuse with byte-identical artifacts" refused_write "$actor" set-deps owner-write changed
+  chk "${actor:-missing identity}: alternate path spelling cannot bypass claim" refused_write "$actor" set ./owner-write failed
+  chk "${actor:-missing identity}: sibling start in reserved worktree refuses" refused_write "$actor" start owner-sibling
+  chk "${actor:-missing identity}: sibling relocate in reserved worktree refuses" refused_write "$actor" relocate "$SRC_PLANS/rl-slug"
+done
+out="$(ps_sess owner tick owner-write 1)"; rc=$?
+chk 'owner can tick while live' test "$rc" = 0
+out="$(ps_sess owner tick owner-write 2)"; rc=$?
+chk 'owner can complete implementation ticks' test "$rc" = 0
+chk 'all ticks do not retire the stored in_progress reservation' test -e "$RUN_STATE/.run-owner"
+out="$(ps_sess owner set owner-write approved --note 'paused: awaiting a human decision')"; rc=$?
+chk 'owner can pause' test "$rc" = 0
+chk 'pause preserves the run reservation' test -f "$RUN_STATE/.run-owner"
+chk 'pause retains the exact recorded pending decision' jq -e '.note=="paused: awaiting a human decision"' "$PLANS/owner-write/.state.json"
+chk 'pause drops the background wait' test ! -e "$RUN_STATE/.run-owner.wait"
+chk 'pause preserves latch and pointer' sh -c '[ -f "$1.idle" ] && [ -f "$1.ptr" ]' sh "$RUN_STATE/.run-owner"
+chk 'paused reservation still blocks foreign mutation' refused_write foreign record-write owner-write
+out="$(ps_sess owner set owner-write in_progress)"; rc=$?
+chk 'same owner can resume its pause' test "$rc" = 0
+# Reader commands and missing-plan diagnostics stay usable under a live claim.
+chk 'foreign read query remains available' test "$(psout query --slug owner-write --format count)" = 1
+chk 'foreign drift remains available' test "$(psout drift owner-write)" = known
+out="$(ps_sess foreign tick not-present 1)"
+chk 'missing-plan diagnostic remains specific' has 'No such plan:' "$out"
+for terminal in implemented failed superseded; do
+  if [ ! -e "$RUN_STATE/.run-owner" ]; then
+    ps set owner-write in_progress >/dev/null
+    ps_sess owner begin-run owner-write >/dev/null
+  fi
+  printf 'idle' > "$RUN_STATE/.run-owner.idle"
+  printf 'wait' > "$RUN_STATE/.run-owner.wait"
+  printf 'ptr' > "$RUN_STATE/.run-owner.ptr"
+  printf 'slug=other-plan\n' > "$RUN_STATE/.run-owner-longer"
+  printf 'unrelated' > "$RUN_STATE/.run-owner-longer.wait"
+  out="$(ps_sess owner set owner-write "$terminal")"; rc=$?
+  chk "$terminal stored transition succeeds" test "$rc" = 0
+  chk "$terminal removes exact marker/companions" sh -c '[ ! -e "$1" ] && [ ! -e "$1.idle" ] && [ ! -e "$1.wait" ] && [ ! -e "$1.ptr" ]' sh "$RUN_STATE/.run-owner"
+  chk "$terminal preserves prefix-sharing session and companion" sh -c '[ -f "$1" ] && [ -f "$1.wait" ]' sh "$RUN_STATE/.run-owner-longer"
+done
+rm -f "$RUN_STATE"/.run-*
+ps set owner-write in_progress >/dev/null
+printf 'slug=owner-write\nstarted=expired\n' > "$RUN_STATE/.run-stale"
+touch -t 200001010000 "$RUN_STATE/.run-stale"
+out="$(ps record-write owner-write)"; rc=$?
+chk 'hookless hash update works after lease expiry' test "$rc" = 0
+chk 'hookless write does not renew stale ownership' test -n "$(find "$RUN_STATE/.run-stale" -mmin +480)"
+
+# Intercept Python filesystem calls only in the scratch fixture. Production has
+# no test-only barriers. Each pause occurs while the real kernel lock is held.
+echo '== Z. Interrupted takeover and queued old-owner writes =='
+INTERCEPT="$ROOT/intercept"; mkdir "$INTERCEPT"
+cat > "$INTERCEPT/sitecustomize.py" <<'PY'
+import atexit,os,pathlib,sys,time
+phase=os.environ.get('MENTOR_FIXTURE_PHASE','')
+root=pathlib.Path(os.environ.get('MENTOR_FIXTURE_BARRIER','/nonexistent'))
+def barrier(at):
+    if phase != at: return
+    root.joinpath('pid').write_text(str(os.getpid()))
+    root.joinpath('ready').touch()
+    deadline=time.monotonic()+8
+    while not root.joinpath('go').exists() and time.monotonic()<deadline:
+        time.sleep(.01)
+replace=os.replace
+unlink=pathlib.Path.unlink
+def replace_at(source,dest,*args,**kwargs):
+    dest=pathlib.Path(dest)
+    if dest.name=='.run-new-owner': barrier('before-publish')
+    if dest.name=='.state.json': barrier('before-state')
+    result=replace(source,dest,*args,**kwargs)
+    if dest.name=='.run-new-owner': barrier('after-publish')
+    if dest.name=='.state.json': barrier('after-state')
+    return result
+def unlink_at(path,*args,**kwargs):
+    name=path.name
+    if name=='.run-old-owner': barrier('before-retire')
+    result=unlink(path,*args,**kwargs)
+    if name=='.run-old-owner': barrier('after-retire')
+    return result
+os.replace=replace_at
+pathlib.Path.unlink=unlink_at
+if len(sys.argv)>1 and sys.argv[1]=='guard':
+    atexit.register(lambda: barrier('after-guard'))
+PY
+wait_ready() {
+  local ready="$1" n
+  for n in $(seq 1 400); do [ ! -f "$ready" ] || return 0; sleep .01; done
+  return 1
+}
+for boundary in before-publish after-publish before-state after-state before-retire after-retire; do
+  rm -f "$RUN_STATE"/.run-*
+  plan transfer '# live transfer' '## Implementation steps' '1. first' '2. second'
+  ps set transfer in_progress >/dev/null
+  saved_pass transfer 1
+  ps_sess old-owner begin-run transfer >/dev/null
+  printf '{"unmanaged":[1,true]}' > "$RUN_STATE/.run-old-owner.wait"
+  checkpoint="$ROOT/checkpoint-$boundary"; mkdir "$checkpoint"
+  (cd "$REPO" && env HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" \
+    CLAUDE_CODE_SESSION_ID=new-owner PYTHONPATH="$INTERCEPT" \
+    MENTOR_FIXTURE_PHASE="$boundary" MENTOR_FIXTURE_BARRIER="$checkpoint" \
+    bash "$PLANSTATE" begin-run transfer --takeover > "$checkpoint/claim.out" 2>&1) & claimant=$!
+  chk "$boundary: takeover reached controlled boundary" wait_ready "$checkpoint/ready"
+  if [ ! -f "$checkpoint/ready" ]; then kill "$claimant" 2>/dev/null || true; wait "$claimant" 2>/dev/null || true; continue; fi
+  chk "$boundary: at least one marker reserves the plan" sh -c '[ -f "$1/.run-old-owner" ] || [ -f "$1/.run-new-owner" ]' sh "$RUN_STATE"
+  # Queue all three calls against the held lock, then kill the publisher at this
+  # exact boundary. Their guard reads must occur AFTER the transfer cutover.
+  if [ "$boundary" != before-publish ]; then
+    (ps_sess old-owner tick transfer 1 > "$checkpoint/tick.out"; echo "$?" > "$checkpoint/tick.rc") & tick_pid=$!
+    (ps_sess old-owner set transfer failed > "$checkpoint/set.out"; echo "$?" > "$checkpoint/set.rc") & set_pid=$!
+    (ps_sess old-owner record-write transfer > "$checkpoint/hash.out"; echo "$?" > "$checkpoint/hash.rc") & hash_pid=$!
+  fi
+  before="$(artifact_snapshot)"
+  kill -9 "$(cat "$checkpoint/pid")"
+  wait "$claimant" 2>/dev/null || true
+  if [ "$boundary" != before-publish ]; then
+    wait "$tick_pid"; wait "$set_pid"; wait "$hash_pid"
+    for op in tick set hash; do
+      chk "$boundary: queued $op refuses after cutover" test "$(cat "$checkpoint/$op.rc")" != 0
+    done
+    chk "$boundary: queued refusals leave all managed artifacts byte-identical" test "$(artifact_snapshot)" = "$before"
+    chk "$boundary: former owner still refuses" refused_write old-owner record-write transfer
+  else
+    out="$(ps_sess old-owner record-write transfer)"; rc=$?
+    chk 'before publication: original owner retains authority' test "$rc" = 0
+  fi
+  out="$(ps_sess new-owner begin-run transfer --takeover)"; rc=$?
+  chk "$boundary: explicit retry recovers without deadlock" test "$rc" = 0
+  chk "$boundary: retry leaves exactly one claim" test "$(find "$RUN_STATE" -maxdepth 1 -type f -name '.run-*' | wc -l | tr -d ' ')" = 1
+  chk "$boundary: recovered owner can write" ps_sess new-owner record-write transfer
+  chk "$boundary: previous owner cannot write" refused_write old-owner record-write transfer
+done
+rm -f "$RUN_STATE"/.run-*
+
+echo '== Z2. Successful takeover serializes both managed-write orders =='
+for operation in tick set record-write; do
+  for first in transfer writer; do
+    rm -f "$RUN_STATE"/.run-*
+    plan transfer '# live transfer' '## Implementation steps' '1. first' '2. second'
+    ps set transfer in_progress >/dev/null
+    saved_pass transfer 1
+    ps_sess old-owner begin-run transfer >/dev/null
+    original_hash="$(sidecar transfer .plan_sha256)"
+    case "$operation" in
+      tick) arguments=(tick transfer 1) ;;
+      set) arguments=(set transfer in_progress --note old-writer) ;;
+      record-write) arguments=(record-write transfer) ;;
+    esac
+    checkpoint="$ROOT/order-$operation-$first"; mkdir "$checkpoint"
+    if [ "$first" = transfer ]; then
+      phase=before-publish; actor=new-owner; first_arguments=(begin-run transfer --takeover)
+    else
+      phase=after-guard; actor=old-owner; first_arguments=("${arguments[@]}")
+    fi
+    (cd "$REPO" && env HOME="$SANDBOX" CLAUDE_CONFIG_DIR="$SANDBOX/.claude" \
+      CLAUDE_CODE_SESSION_ID="$actor" PYTHONPATH="$INTERCEPT" \
+      MENTOR_FIXTURE_PHASE="$phase" MENTOR_FIXTURE_BARRIER="$checkpoint" \
+      bash "$PLANSTATE" "${first_arguments[@]}" > "$checkpoint/first.out" 2>&1
+      echo "$?" > "$checkpoint/first.rc") & first_pid=$!
+    chk "$operation/$first: first command reached the lock barrier" wait_ready "$checkpoint/ready"
+    if [ ! -f "$checkpoint/ready" ]; then kill "$first_pid" 2>/dev/null || true; wait "$first_pid" 2>/dev/null || true; continue; fi
+    if [ "$first" = transfer ]; then
+      (ps_sess old-owner "${arguments[@]}" > "$checkpoint/second.out"; echo "$?" > "$checkpoint/second.rc") & second_pid=$!
+    else
+      (ps_sess new-owner begin-run transfer --takeover > "$checkpoint/second.out"; echo "$?" > "$checkpoint/second.rc") & second_pid=$!
+    fi
+    touch "$checkpoint/go"
+    wait "$first_pid"; wait "$second_pid"
+    chk "$operation/$first: first command succeeds" test "$(cat "$checkpoint/first.rc")" = 0
+    if [ "$first" = transfer ]; then
+      chk "$operation: queued old writer refuses after successful transfer" test "$(cat "$checkpoint/second.rc")" != 0
+      chk "$operation: refused old writer leaves step unticked" test "$(mentor_plan_tick_counts "$PLANS/transfer/plan.md")" = '0 2'
+      chk "$operation: refused old writer leaves note untouched" test "$(sidecar transfer .note)" = ''
+      chk "$operation: refused old writer leaves hash untouched" test "$(sidecar transfer .plan_sha256)" = "$original_hash"
+    else
+      chk "$operation: transfer succeeds after completed old write" test "$(cat "$checkpoint/second.rc")" = 0
+      case "$operation" in
+        tick) chk 'transfer retains completed tick' test "$(mentor_plan_tick_counts "$PLANS/transfer/plan.md")" = '1 2' ;;
+        set) chk 'transfer retains completed state note' test "$(sidecar transfer .note)" = old-writer ;;
+        record-write) chk 'transfer retains recorded hash' test "$(psout drift transfer)" = known ;;
+      esac
+    fi
+    chk "$operation/$first: transfer mirrors the new session" test "$(sidecar transfer .owner_session)" = new-owner
+    chk "$operation/$first: transfer leaves exactly one claim" test "$(find "$RUN_STATE" -maxdepth 1 -type f -name '.run-*' | wc -l | tr -d ' ')" = 1
+  done
+done
+rm -f "$RUN_STATE"/.run-*
+
 echo
 echo "RESULT: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = "0" ]

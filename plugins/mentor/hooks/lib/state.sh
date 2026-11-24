@@ -34,7 +34,8 @@
 #   default to the XDG state tree; an existing Claude-era fallback is preserved.
 #
 # CONTRACT: callers run under `set -euo pipefail`. Every function here exits with
-# status 0. All helpers are fail-soft: bad input echoes empty, never aborts the caller.
+# status 0 unless documented as a predicate/transaction. Run transactions return
+# nonzero on refusal; callers must handle that result. Other helpers are fail-soft.
 # The exception is the predicate `mentor_plan_state_valid`, which returns 1 for
 # false — always call it from an `if`/`&&` condition, never bare.
 
@@ -62,23 +63,11 @@ mentor_state_dir() {
   return 0
 }
 
-# mentor_begin_run <repo_root> <slug> — shared native continuation marker writer.
-# The CLI validates its explicit slug; approval invokes that same CLI after promotion.
-# No lifecycle-state or gate writes here. No Claude session means prose-only continuation.
-mentor_begin_run() {
-  local repo_root="${1:-}" slug="${2:-}" session="${CLAUDE_CODE_SESSION_ID:-nosession}" run_state_dir
-  [ "$session" != nosession ] && [ -n "$session" ] && [ -n "$slug" ] || return 0
-  case "$session" in */*|.|..) echo "[mentor begin-run] Invalid session id — no marker written." >&2; return 0 ;; esac
-  run_state_dir="$(mentor_state_dir "$repo_root")"
-  [ -n "$run_state_dir" ] || return 0
-  mkdir -p -m 700 "$run_state_dir" 2>/dev/null || return 0
-  find "$run_state_dir" -maxdepth 1 -name '.run-*' -mmin +1440 -delete 2>/dev/null || true
-  if printf 'slug=%s\nstarted=%s\n' "$slug" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      > "${run_state_dir}/.run-${session}" 2>/dev/null; then
-    echo "  run: marker written — the Stop hook keeps this session going while ${slug} is in_progress"
-  fi
-  return 0
-}
+# Native run primitives are an optional adjacent adapter. Durable readers and the
+# portable artifact workflow remain available when an installed copy lacks it.
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/run.sh" ]; then
+  . "$(dirname "${BASH_SOURCE[0]}")/run.sh"
+fi
 
 # mentor_no_repo_state_dir — echo the host-neutral fallback for sessions outside a
 # git repository. MENTOR_STATE_HOME is the explicit cross-host override. XDG state is
@@ -315,29 +304,55 @@ mentor_armed_draft() {
 
 # mentor_live_plan <plans_dir> <wt_id> <session_id> [live_gate] — shared read-only
 # selection for SessionStart and prompt context: armed draft, exact-session run,
-# then explicitly owned in_progress recovery. Emits <source><TAB><plan.md>, or
-# empty. A selected missing plan still names its path for recovery reporting.
+# then a claim in this worktree and finally sidecar recovery. Emits kind, plan.md
+# and any foreign owner as TSV.
+# A selected missing plan still names its path for recovery reporting.
 mentor_live_plan() {
   local plans_dir="${1:-}" wt_id="${2:-}" session="${3:-}" gate="${4:-}"
-  local candidate="" slug=""
+  local candidate="" slug="" claims="[]" owner="" kind="" marker
   [ -n "$plans_dir" ] && [ -d "$plans_dir" ] || return 0
   if [ "$#" -lt 4 ]; then gate="$(mentor_live_gate "$plans_dir" "$wt_id")"; fi
   candidate="$(mentor_armed_draft "$plans_dir" "$wt_id" "$gate")"
   if [ -n "$candidate" ]; then
     printf 'draft\t%s\n' "$candidate"; return 0
   fi
-  case "$session" in
-    ''|*/*|.|..) ;;
-    *) slug="$(mentor_marker_field "${plans_dir%/*}/.run-${session}" slug)" ;;
-  esac
-  case "$slug" in
-    ''|*/*|.|..) ;;
-    *) printf 'run\t%s/%s/plan.md\n' "$plans_dir" "$slug"; return 0 ;;
-  esac
-  if [ -n "$wt_id" ]; then
-    candidate="$(mentor_newest_stored_plan "$plans_dir" "$wt_id" in_progress)"
-    if [ -n "$candidate" ]; then printf 'recovery\t%s\n' "$candidate"; fi
+  # Never invite recovery if run files exist but the native reader is unavailable.
+  for marker in "${plans_dir%/*}"/.run-*; do
+    [ -f "$marker" ] || continue
+    declare -F mentor_run_inspect >/dev/null || return 0
+    claims="$(mentor_run_inspect "${plans_dir%/*}")" || return 0
+    [ "$claims" != "[]" ] || _mentor_run_available || return 0
+    break
+  done
+  slug="$(printf '%s' "$claims" | jq -r --arg session "$session" \
+    '[.[] | select(.live and .session == $session)][0].slug // empty')" || return 0
+  if [ -z "$slug" ] && [ -n "$wt_id" ]; then
+    # The claim moves with an explicit takeover. The sidecar keeps its original worktree.
+    slug="$(printf '%s' "$claims" | jq -r --arg wt "$wt_id" '
+      [.[] | select(.live and .worktree == $wt and (.state | IN("approved","in_progress")))]
+      | sort_by(if .state == "in_progress" then 0
+                elif (.note | tostring | startswith("paused:")) then 2 else 1 end)
+      | .[0].slug // empty
+    ')" || return 0
   fi
+  if [ -n "$slug" ]; then
+    candidate="${plans_dir}/${slug}/plan.md"
+  elif [ -n "$wt_id" ]; then
+    candidate="$(mentor_newest_stored_plan "$plans_dir" "$wt_id" in_progress)"
+  fi
+  [ -n "$candidate" ] || return 0
+  slug="${candidate%/plan.md}"; slug="${slug##*/}"
+  owner="$(printf '%s' "$claims" | jq -r --arg slug "$slug" '
+    [.[] | select(.slug == $slug and (.state | IN("implemented","failed","superseded") | not))]
+    | if any(.[]; .live) then
+        if length > 1 then "multiple sessions" else .[0].session end
+      else "" end
+  ')" || return 0
+  kind=recovery
+  if [ -n "$owner" ]; then
+    if [ "$owner" = "$session" ]; then kind=run; else kind=foreign; fi
+  fi
+  printf '%s\t%s\t%s\n' "$kind" "$candidate" "$owner"
   return 0
 }
 
@@ -457,6 +472,18 @@ mentor_cwd() {
   return 0
 }
 
+# Context hooks can renew or consume run state. Reject ambiguous input before Bash
+# extracts the session ID, since command substitution strips trailing newlines.
+# Accept older payloads that omit event metadata.
+mentor_context_event() {
+  printf '%s' "$1" | jq -ces --arg event "$2" '
+    select(length == 1) | .[0] | objects
+    | select(if has("hook_event_name") then .hook_event_name == $event else true end)
+    | select(if has("session_id") then .session_id | strings | test("[^A-Za-z0-9_.-]") | not else true end)
+    | select(if has("cwd") then .cwd | strings | contains("\u0000") | not else true end)
+  ' 2>/dev/null
+}
+
 # --- plan state (v2.4.0; deps v2.17.0; owner/owner_session v2.23.0) ----------
 #
 # Each plan dir carries a hidden `.state.json` sidecar:
@@ -492,7 +519,7 @@ MENTOR_PLAN_STATES="draft approved in_progress implemented failed superseded"
 # minutes — a crashed planning session must never permanently lock out editing.
 # plan-gate.sh's self-heal and plan-state.sh's `gate` subcommand both read this ONE
 # number (via mentor_marker_stale below) so the two can never silently drift apart.
-MENTOR_PLAN_MARKER_STALE_MIN=480
+MENTOR_PLAN_MARKER_STALE_MIN="${MENTOR_PLAN_MARKER_STALE_MIN:-480}"
 
 # mentor_plan_state_valid <state> — status 0 when <state> is one of the six above.
 # THE ONE NON-ZERO-EXITING HELPER HERE: only call it as a condition.

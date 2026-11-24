@@ -178,8 +178,8 @@ decides — unless the constitution's Always-pause list names and removes mergin
 **merge grant**). Then merge on a PASS and green checks, and log the row.
 
 Inside a plan run without a merge grant, the question is the hand-over, not a pause.
-Once the PASS is in and the Done review is written, `set <slug> implemented`, remove
-the run marker, then ask. Write no `paused` row.
+Once the PASS and Done review are saved, close the run with
+`plan-state.sh set <slug> implemented`, then ask. Write no `paused` row.
 
 Inside a plan run, with or without a merge grant, when the runbook has **After merge**
 lines, the Done review carries one line, `Post-merge steps: not independently graded

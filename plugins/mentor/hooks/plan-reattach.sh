@@ -1,36 +1,15 @@
 #!/usr/bin/env bash
 # SessionStart: point fresh context at this worktree's live plan, without owning a run.
-# Exact-session run markers survive resume/compact; clear/fork mint a new session id.
-# Read-only and fail-open: this hook never creates, transfers or deletes a marker.
+# Exact-session run markers survive resume/compact. Ownership uses the session id.
 set -uo pipefail
 
 command -v jq >/dev/null 2>&1 || exit 0
 HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${HOOK_DIR}/lib/state.sh" 2>/dev/null || exit 0
 INPUT="$(cat)" || exit 0
-# NUL-delimited fields preserve whitespace in paths/session ids. The final token
-# confirms jq validated the whole input, including a possible trailing parse error.
-{
-  IFS= read -r -d '' CWD &&
-  IFS= read -r -d '' session_id &&
-  IFS= read -r -d '' source &&
-  IFS= read -r -d '' cwd_type &&
-  IFS= read -r -d '' parsed
-} < <(
-  printf '%s' "$INPUT" | jq -jse '
-    select(length > 0 and (.[-1] | type == "object"))
-    | (map(.cwd // empty | tostring) | join("\n")),
-      (map(.session_id // "" | select(type == "string")) | join("\n")),
-      (map(.source // "" | select(type == "string")) | join("\n")),
-      (if any(.[]; (.cwd // "" | type) == "object" or (.cwd // "" | type) == "array")
-       then "complex" else "scalar" end)
-    | gsub("\u0000"; "") | sub("\n+$"; "") | . + "\u0000"
-  ' 2>/dev/null && printf 'ok\0'
-) || exit 0
-[ "$parsed" = ok ] || exit 0
-# Keep mentor_cwd's pretty-printed handling of exceptional non-scalar cwd values.
-case "$cwd_type" in complex) CWD="$(mentor_cwd "$INPUT")" ;; esac
-[ -n "$CWD" ] || CWD="$PWD"
+INPUT="$(mentor_context_event "$INPUT" SessionStart)" || exit 0
+CWD="$(mentor_cwd "$INPUT")"
+session_id="$(printf '%s' "$INPUT" | jq -r '.session_id // ""')" || exit 0
 
 repo_root="$(mentor_repo_root "$CWD")"
 [ -n "$repo_root" ] || exit 0
@@ -43,15 +22,35 @@ wt_id=""
 armed=0
 gate="$(mentor_live_gate "$plans_dir" "$wt_id")"
 [ -z "$gate" ] || armed=1
-slug=""; owns_run=0
-IFS=$'\t' read -r selection candidate <<<"$(mentor_live_plan "$plans_dir" "$wt_id" "$session_id" "$gate")"
-if [ -n "$candidate" ]; then slug="$(basename "$(dirname "$candidate")")"; fi
-[ "$selection" != run ] || owns_run=1
-[ -n "$slug" ] || [ "$armed" -eq 1 ] || exit 0
+reattach_locked() {
+  local wake_notice=""
+  if [ -n "$session_id" ]; then
+    wake_notice="$(_mentor_run_locked wake "$state_dir" "$session_id" session-start)" || return 1
+  fi
+  printf '%s\n' "notice=$wake_notice"
+  mentor_live_plan "$plans_dir" "$wt_id" "$session_id" "$gate"
+}
 
-if [ -z "$slug" ]; then
+slug=""; selected=""; notice=""
+if [ -d "$plans_dir" ] && declare -F mentor_with_run_lock >/dev/null; then
+  augmented="$(mentor_with_run_lock "$state_dir" reattach_locked 2>/dev/null)" || exit 0
+  notice="${augmented%%$'\n'*}"; notice="${notice#notice=}"
+  if [[ "$augmented" == *$'\n'* ]]; then selected="${augmented#*$'\n'}"; fi
+else
+  selected="$(mentor_live_plan "$plans_dir" "$wt_id" "$session_id" "$gate")"
+fi
+IFS=$'\t' read -r selection candidate owner <<<"$selected"
+if [ -n "$candidate" ]; then slug="$(basename "$(dirname "$candidate")")"; fi
+[ -n "$slug$notice" ] || [ "$armed" -eq 1 ] || exit 0
+
+if [ "$selection" = foreign ]; then
+  block="mentor run $slug belongs to $owner. Leave its plan and verdicts with the owning session."
+elif [ -z "$slug" ]; then
   # The gate can predate research's first skeleton; do not invent a plan slug.
-  block="$(printf 'mentor plan: drafting\npath: .mentor/plans/ (no plan.md yet)\nstate: unknown\nticks: 0/0\nnext: drafting')"
+  block=""
+  if [ "$armed" -eq 1 ]; then
+    block="$(printf 'mentor plan: drafting\npath: .mentor/plans/ (no plan.md yet)\nstate: unknown\nticks: 0/0\nnext: drafting')"
+  fi
 else
   plan_dir="${plans_dir}/${slug}"
   plan_md="${plan_dir}/plan.md"
@@ -83,12 +82,10 @@ else
   if [ "$(mentor_plan_drift "$plan_md")" = changed ]; then
     block="${block}"$'\n'"plan.md changed since mentor last wrote it — read it before editing it further"
   fi
-  if [ "$source" != fork ] && [ "$owns_run" -eq 0 ] && [ "$stored" = in_progress ]; then
+  if [ "$selection" = recovery ] && [ "$stored" = in_progress ]; then
     block="${block}"$'\n'"resume with /mentor:plan ${slug}"
   fi
 fi
-if [ "$source" = fork ]; then
-  block="${block}"$'\n'"this fork owns no run — the run belongs to the original session"
-fi
+[ -z "$notice" ] || block="$notice${block:+$'\n'$block}"
 jq -n --arg context "$block" '{hookSpecificOutput: {hookEventName: "SessionStart", additionalContext: $context}}' 2>/dev/null || true
 exit 0

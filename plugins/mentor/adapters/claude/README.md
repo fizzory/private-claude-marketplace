@@ -18,6 +18,26 @@ or `unknown`; retain the labelled `self-graded` fallback when delegation is unav
 
 ## Shared run contract
 
+One Claude session owns each live plan across linked worktrees. A session fork
+sees the owner even when Claude reports its start as a resume. Take over a
+live claim only at the user's direction, after the prior session has paused
+and its admitted edits have finished. Use
+`plan-state.sh begin-run <slug> --takeover`. New plan and verdict writes from
+the former owner are refused after the transfer.
+
+Stop permits native in-flight jobs silently. For jobs outside that list, run
+`plan-state.sh wait <slug> --for "<label>" [--ttl-min N]` before yielding.
+The default is 60 minutes, capped by the run lease. The next valid owner prompt
+consumes the declaration. A valid owner prompt or SessionStart announces an
+expired wait once. Redeclare after a partial completion when work is still pending.
+Use a bounded foreground wait if there is no completion wakeup.
+
+A stalled run gets one reason per unchanged plan and effective verdict content.
+A valid owner event renews a fresh inactivity lease. After the lease expires,
+acquire the run explicitly before continuing. Managed transitions and hooks serialize through a directory lock on the shared `.mentor/` state. Native
+continuation uses Python 3.8+ with standard-library `fcntl` on macOS and Linux.
+The durable Markdown workflow is available on hosts without native hooks.
+
 Resolve every needed role through planning's
 [Role resolution](../../skills/planning/SKILL.md#decision-maker), using an explicit
 session mapping first and otherwise an agent's described purpose. Every brief opens

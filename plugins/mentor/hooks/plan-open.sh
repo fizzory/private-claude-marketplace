@@ -43,7 +43,9 @@ esac
 # Resolve from the edited plan's repo, which can differ from the hook's cwd.
 plan_dir="$(dirname "$file")"
 hook_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-(cd "$plan_dir" && bash "${hook_dir}/plan-state.sh" record-write "$(basename "$plan_dir")") >/dev/null 2>&1 || true
+session_id="$(printf '%s' "$input" | jq -r '.session_id | strings' 2>/dev/null)"
+(cd "$plan_dir" && CLAUDE_CODE_SESSION_ID="$session_id" \
+  bash "${hook_dir}/plan-state.sh" record-write "$(basename "$plan_dir")") >/dev/null 2>&1 || true
 
 # Plan and page in sync: remind the agent to regenerate the plan's review page this turn.
 review_page="$(dirname "$(dirname "$plan_dir")")/reviews/$(basename "$plan_dir")/review.html"

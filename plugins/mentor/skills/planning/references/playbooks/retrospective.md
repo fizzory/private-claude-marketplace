@@ -34,18 +34,20 @@ pre-run human questions; PR review is the human gate, so requested retros run en
   `approved`/`in_progress` state, including released playbook aliases. Before transitioning
   or calling `begin-run`, inspect any `paused:` note: a stop-word pause requires the
   human's explicit resume; an always-pause action stays unapplied under **Needs your call**,
-  with a `resumed` row before continuing.
+  with a `resumed` row before continuing. When `plan-state.sh` is available,
+  acquire the run with `plan-state.sh begin-run <slug>` before writing a resumed row
+  or changing any saved plan or verdict. A refused claim leaves the run with its owner.
 - Write the durable plan, Goal check, decision log and Done review under
   `.mentor/plans/<slug>/`. Resolve facts from evidence and reversible choices through
   decision-makers; log choices with `review?: needed` rather than asking the human.
-- Run the existing plan validation (`plan-state.sh verify <slug>` when available).
-  Move only this validated plan directly from `draft` to `in_progress`, using
-  `plan-state.sh set <slug> in_progress`; never call `begin-plan.sh` or
-  `approve-plan.sh`. Resume `approved` with the same targeted transition.
+- When `plan-state.sh` is available, validate with `plan-state.sh verify <slug>`,
+  reserve a new plan with `plan-state.sh begin-run <slug>`, and move it from
+  `draft` to `in_progress` with `plan-state.sh set <slug> in_progress`.
+  Resume `approved` with the same targeted transition. The retrospective entry
+  uses neither `begin-plan.sh` nor `approve-plan.sh`.
 - Log this decision row verbatim: "no plan approval — retro playbook; the PR review
-  is the human gate". Start native continuation with `plan-state.sh begin-run <slug>`
-  when available; without the Claude Stop hook, keep running in-thread and preserve
-  the same plan and checks.
+  is the human gate". With no native continuation helper, continue in-thread and
+  preserve the same plan and checks.
 - Before applying any Accepted row, record the destination baselines in Deliver
   mode below; a restart reuses those baselines instead of treating prior retro edits
   as unrelated dirty content. Each row becomes one implementation step and retains

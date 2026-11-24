@@ -142,6 +142,9 @@ _plan_complete() {
     && mentor_plan_step_scan "$1" | awk -F '\t' '$1 == "TOTAL" { found = ($2 > 0) } END { exit !found }'
 }
 
+state_dir="$(mentor_state_dir "$repo_root")"
+
+approve_locked() {
 marker=""
 legacy_mode=0
 
@@ -300,19 +303,6 @@ if [ -n "$marker" ]; then
     exit 1
   fi
 
-  # Release the gate.
-  rm -f "$marker" 2>/dev/null || true
-  if [ "$legacy_mode" -eq 1 ]; then
-    echo "[mentor approve-plan] Plan APPROVED — legacy repo-wide gate released. Repo edits are now allowed in every worktree."
-  else
-    echo "[mentor approve-plan] Plan APPROVED — gate released. Repo edits are now allowed."
-  fi
-  echo "  plan: ${newest_plan}"
-  if [ "$legacy_mode" -eq 0 ] && [ -n "$wt_id" ] && [ -f "$legacy_marker" ] && ! mentor_marker_stale "$legacy_marker"; then
-    echo "  WARNING: a legacy repo-wide marker is still live (${legacy_marker}) — it blocks edits"
-    echo "  in EVERY worktree (including this one) until its own arming session approves it or it"
-    echo "  goes stale. This worktree's own gate is released, but repo edits stay BLOCKED."
-  fi
 else
   # Idempotency: gate already open (already approved, or never armed). Skip
   # validation/release but still honor the flag directive below.
@@ -324,7 +314,12 @@ else
   # candidates instead of asserting one, and point at a command that actually
   # answers "did MY plan promote?" (`list`, not `query` — the latter is
   # JSON-only and repo-wide, the wrong shape here).
-  newest_plan="$(mentor_newest_plan "$plans_dir")"
+  IFS=$'\t' read -r run_selection selected_plan selected_owner <<<"$(mentor_live_plan "$plans_dir" "$wt_id" "$this_session" "")"
+  case "$run_selection" in
+    run) newest_plan="$selected_plan" ;;
+    foreign) [ "$this_session" = nosession ] || newest_plan="$selected_plan" ;;
+  esac
+  if [ -z "$newest_plan" ]; then newest_plan="$(mentor_newest_plan "$plans_dir")"; fi
   echo "[mentor approve-plan] Gate is already open — nothing to release."
   echo "  (Could be: another session's approve-plan.sh, plan-gate's stale self-heal,"
   echo "   a manual rm, or the gate was never armed this session. If YOU planned this"
@@ -333,7 +328,38 @@ else
   echo "   Or this worktree was moved/renamed (\`git worktree move\` changes the worktree"
   echo "   id) — check plan-state.sh gate --verbose for a marker owned by a different"
   echo "   worktree id.)"
-  [ -n "$newest_plan" ] && echo "  plan (repo-wide newest, may not be yours): ${newest_plan}"
+  if [ -n "$newest_plan" ]; then
+    if [ "$run_selection" = run ]; then
+      echo "  plan (owned run): ${newest_plan}"
+    else
+      echo "  plan (repo-wide newest, may not be yours): ${newest_plan}"
+    fi
+  fi
+fi
+
+run_slug=""
+if [ -n "$newest_plan" ]; then
+  run_slug="$(basename "$(dirname "$newest_plan")")"
+  mentor_run_guard_locked "$state_dir" "$run_slug" "$this_session" "$wt_id" || exit 1
+fi
+
+# Check the complete write set before touching any sidecars or releasing a gate.
+while IFS= read -r plan_path; do
+  [ -n "$plan_path" ] || continue
+  plan_dir="$(dirname "$plan_path")"
+  case "$(mentor_plan_effective_state "$plan_dir")" in draft|unknown) ;; *) continue ;; esac
+  _plan_complete "$plan_path" || continue
+  mentor_run_guard_locked "$state_dir" "$(basename "$plan_dir")" "$this_session" "$wt_id" || exit 1
+done <<<"$newly_planned"
+
+if [ "$flag" != --deliver ] && [ -n "$run_slug" ] && [ "$this_session" != nosession ]; then
+  if [ -z "$marker" ]; then
+    case "$(mentor_plan_state_stored "$(dirname "$newest_plan")")" in
+      approved|in_progress) ;;
+      *) echo '[mentor approve-plan] No approved run to start through the open gate.' >&2; exit 1 ;;
+    esac
+  fi
+  mentor_run_claim_locked "$state_dir" "$run_slug" "$this_session" "$wt_id" || exit 1
 fi
 
 # Promote plan state on EVERY approval path — this must run before the --deliver
@@ -351,8 +377,7 @@ fi
 # All candidates need a Goal check and a parsed implementation step;
 # an abandoned research skeleton must remain draft rather than be swept to approved.
 #
-# Fail-soft throughout: every helper here exits 0, so a state-write problem can never
-# turn a successful gate release into an error.
+# The gate stays armed until selected promotion and claim writes succeed.
 #
 # Report the outcome on EVERY path, including both "nothing to do" paths. Silence is
 # ambiguous: it reads identically to the promotion block never running at all (a stale
@@ -387,6 +412,10 @@ if [ -n "$newly_planned" ] || [ -n "$unowned_skipped" ]; then
       _promote_plan "$plan_dir" "swept in by approve-plan.sh — plan.md was newer than this session's .planning marker but this wasn't the plan being approved; not individually reviewed. Undo: plan-state.sh set $(basename "$plan_dir") draft"
       swept="${swept}$(basename "$plan_dir") "
     fi
+    if [ "$(mentor_plan_state_stored "$plan_dir")" != approved ]; then
+      echo "[mentor approve-plan] Could not persist approval for $plan_dir; the gate stays closed." >&2
+      exit 1
+    fi
   done <<<"$newly_planned"
   if [ -n "$promoted" ]; then
     echo "  state: approved — ${promoted% }"
@@ -405,6 +434,21 @@ if [ -n "$newly_planned" ] || [ -n "$unowned_skipped" ]; then
   fi
 else
   echo "  state: unchanged — no plans written this session, nothing to promote"
+fi
+
+if [ -n "$marker" ]; then
+  rm -f "$marker" || exit 1
+  if [ "$legacy_mode" -eq 1 ]; then
+    echo "[mentor approve-plan] Plan APPROVED — legacy repo-wide gate released. Repo edits are now allowed in every worktree."
+  else
+    echo "[mentor approve-plan] Plan APPROVED — gate released. Repo edits are now allowed."
+  fi
+  echo "  plan: ${newest_plan}"
+  if [ "$legacy_mode" -eq 0 ] && [ -n "$wt_id" ] && [ -f "$legacy_marker" ] && ! mentor_marker_stale "$legacy_marker"; then
+    echo "  WARNING: a legacy repo-wide marker is still live (${legacy_marker}) — it blocks edits"
+    echo "  in EVERY worktree (including this one) until its own arming session approves it or it"
+    echo "  goes stale. This worktree's own gate is released, but repo edits stay BLOCKED."
+  fi
 fi
 
 # Read the resolved approval candidate afresh, without recording a mentor write:
@@ -441,12 +485,9 @@ EOF
   exit 0
 fi
 
-# Proceed starts native continuation for the same explicit plan; --deliver exited
-# above. The writer is shared with retros, which do not approve or promote drafts.
-run_slug=""
-[ -n "${newest_plan:-}" ] && run_slug="$(basename "$(dirname "$newest_plan")")"
-if [ -n "$run_slug" ]; then
-  bash "${hook_dir}/plan-state.sh" begin-run "$run_slug" || true
+# A claim was established before the gate was opened.
+if [ -n "$run_slug" ] && [ "$this_session" != nosession ]; then
+  echo "  run: marker written — the Stop hook keeps this session going while ${run_slug} is in_progress"
 fi
 
 # Point to the single full directive as the model resumes after the Bash call.
@@ -459,3 +500,6 @@ EOF
 
 _approval_anchor
 exit 0
+}
+
+mentor_with_run_lock "$state_dir" approve_locked

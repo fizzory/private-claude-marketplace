@@ -70,7 +70,7 @@ reset() {
   mkdir -p "$PLAN"
   write_plan 1; set_state in_progress
 }
-record() { (cd "$REPO" && bash "$HOOKS/plan-state.sh" record-write demo >/dev/null 2>&1); }
+record() { (cd "$REPO" && CLAUDE_CODE_SESSION_ID="$SID" bash "$HOOKS/plan-state.sh" record-write demo >/dev/null 2>&1); }
 live_gate() {
   : > "$1"
   python3 - "$1" <<'PY'
@@ -105,31 +105,48 @@ echo '== B. all five lifecycle payloads reattach one changed live-plan block =='
 reset; mark; record
 printf '\nOutside edit\n' >> "$PLAN/plan.md"
 for event in startup compact resume clear fork; do
-  event_sid="$SID"
-  case "$event" in clear|fork) event_sid="new-$event" ;; esac
-  run "$event" "$event_sid"
+  run "$event" "$SID"
   chk "$event emits one SessionStart additionalContext block" one_block
   chk "$event names path" has 'path: .mentor/plans/demo/plan.md' "$CONTEXT"
   chk "$event reports stored state" has 'state: in_progress' "$CONTEXT"
   chk "$event reports ticks" has 'ticks: 1/3' "$CONTEXT"
   chk "$event names next step" has 'next: step 2/3' "$CONTEXT"
   chk "$event reports drift" has 'plan.md changed since mentor last wrote it — read it before editing it further' "$CONTEXT"
-  case "$event" in
-    clear)
-      chk 'clear offers exactly one recovery line' test "$(printf '%s\n' "$CONTEXT" | grep -Fc 'resume with /mentor:plan demo')" = 1
-      chk 'clear does not create a marker' test ! -e "$STATE/.run-new-clear"
-      ;;
-    fork)
-      chk 'fork explicitly owns no run' has 'this fork owns no run — the run belongs to the original session' "$CONTEXT"
-      chk 'fork does not offer a recovery command' hasnt 'resume with' "$CONTEXT"
-      chk 'fork does not create a marker' test ! -e "$STATE/.run-new-fork"
-      ;;
-    *) chk "$event retains exact-session ownership without a recovery line" hasnt 'resume with' "$CONTEXT" ;;
-  esac
+  chk "$event retains exact-session ownership without a recovery line" hasnt 'resume with' "$CONTEXT"
+  run "$event" "new-$event"
+  chk "$event in another session emits one JSON block" one_block
+  chk "$event in another session receives exactly one ownership line" test "$(printf '%s\n' "$CONTEXT" | wc -l | tr -d ' ')" = 1
+  chk "$event in another session names original owner" has "belongs to $SID" "$CONTEXT"
+  chk "$event in another session offers no recovery command" hasnt 'resume with' "$CONTEXT"
+  chk "$event in another session creates no marker" test ! -e "$STATE/.run-new-$event"
 done
 chk 'original marker stays intact' test "$(cat "$STATE/.run-$SID")" = "$(printf 'slug=demo\nstarted=2026-11-07T00:00:00Z')"
-run fork "$SID"
-chk 'even a fork payload carrying an exact marker claims no run' has 'this fork owns no run' "$CONTEXT"
+
+echo '== Transfer into a linked worktree =='
+reset; mark
+receiving="$ROOT/receiving worktree"
+chk 'create linked receiving worktree' git -C "$REPO" worktree add -q --detach "$receiving"
+transfer() {
+  (cd "$receiving" && CLAUDE_CODE_SESSION_ID=receiving-session bash "$HOOKS/plan-state.sh" begin-run demo --takeover) >/dev/null
+}
+chk 'receive the live plan from the original worktree' transfer
+chk 'transfer preserves the historical sidecar worktree' test "$(jq -r '.owner' "$PLAN/.state.json")" = "$WT"
+mkdir -p "$STATE/plans/paused"
+printf '# Paused\n' > "$STATE/plans/paused/plan.md"
+receiving_wt="$(mentor_worktree_id "$receiving")"
+jq -nc '{state:"approved",note:"paused: row 5"}' > "$STATE/plans/paused/.state.json"
+printf 'slug=paused\nstarted=fixture\nworktree=%s\n' "$receiving_wt" > "$STATE/.run-earlier-paused"
+run resume receiving-fork "$receiving"
+chk 'fork in receiving worktree gets one ownership block' one_block
+chk 'fork in receiving worktree sees only the current owner' test "$CONTEXT" = \
+  'mentor run demo belongs to receiving-session. Leave its plan and verdicts with the owning session.'
+OUT="$(jq -nc --arg cwd "$receiving" \
+  '{session_id:"receiving-fork",cwd:$cwd,hook_event_name:"UserPromptSubmit",prompt:"<task-notification>done</task-notification>"}' |
+  bash "$HOOKS/prompt-advisories.sh" 2>"$ROOT/err")"; RC=$?
+chk 'task notification in the receiving fork emits no pointer' silent
+chk 'receiving fork does not reserve the run' test ! -e "$STATE/.run-receiving-fork"
+run compact receiving-session "$receiving"
+chk 'the new owner still receives the live plan context' has 'path: .mentor/plans/demo/plan.md' "$CONTEXT"
 
 echo '== C. gate, stored state and next-step variants =='
 reset; set_state draft
@@ -161,8 +178,9 @@ reset; rm -rf "$PLAN"; touch "$STATE/plans/.planning.$WT"; run
 chk 'gate before first skeleton still emits one block' one_block
 chk 'gate before first skeleton invents no slug' has 'path: .mentor/plans/ (no plan.md yet)' "$CONTEXT"
 
-echo '== D. unmatched owned runs offer recovery without taking ownership =='
+echo '== D. expired runs offer recovery without taking ownership =='
 reset; mark another-session
+touch -t 200001010000 "$STATE/.run-another-session"
 before="$(cksum "$PLAN/plan.md" "$PLAN/.state.json" "$STATE/.run-another-session")"
 run resume fresh-session
 chk 'unmatched owned in_progress plan emits one block' one_block

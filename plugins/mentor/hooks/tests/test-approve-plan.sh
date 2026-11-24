@@ -687,5 +687,61 @@ for approval in proceed deliver; do
 done
 
 echo
+echo '== U. Run ownership controls approval and new draft gates =='
+clear_plans
+rm -f "$MARKER" "$MARKER_B" "$LEGACY_MARKER" "$STATE_DIR"/.run-*
+mkdir -p "$PLANS_DIR/run-a" "$PLANS_DIR/draft-b"
+write_complete_plan "$PLANS_DIR/run-a/plan.md" 'Run A'
+touch -t 200001010000 "$PLANS_DIR/run-a/plan.md"
+write_complete_plan "$PLANS_DIR/draft-b/plan.md" 'Draft B'
+printf '{"state":"in_progress","owner":"%s"}\n' "$WTA_ID" > "$PLANS_DIR/run-a/.state.json"
+printf '{"state":"draft","owner":"%s"}\n' "$WTA_ID" > "$PLANS_DIR/draft-b/.state.json"
+printf 'slug=run-a\nstarted=fixture\nworktree=%s\n' "$WTA_ID" > "$STATE_DIR/.run-owner-a"
+draft_before="$(cksum "$PLANS_DIR/draft-b/.state.json")"
+out="$(apsess owner-a)"; rc=$?
+chk 'repeated Proceed resolves the exact owned run' test "$rc" = 0
+chk 'the newer sibling did not replace the run slug' grep -qx 'slug=run-a' "$STATE_DIR/.run-owner-a"
+chk 'the newer sibling draft is unchanged' test "$draft_before" = "$(cksum "$PLANS_DIR/draft-b/.state.json")"
+for actor in owner-a other-session; do
+  out="$(cd "$REPO" && CLAUDE_CODE_SESSION_ID="$actor" bash "$BEGIN" draft-b 2>&1)"; rc=$?
+  chk "$actor cannot arm a gate over an active run" test "$rc" != 0
+  chk "$actor leaves the edit gate open" test ! -f "$MARKER"
+done
+out="$(cd "$WTB" && CLAUDE_CODE_SESSION_ID=other-session bash "$BEGIN" separate-draft 2>&1)"; rc=$?
+chk 'an independent linked worktree retains the draft gate' test "$rc" = 0
+chk 'only the independent gate armed' test -f "$MARKER_B"
+rm -f "$MARKER_B"
+arm
+touch -t 200001010000 "$MARKER"
+rm -rf "$PLANS_DIR/draft-b"
+touch "$PLANS_DIR/run-a/plan.md"
+before="$(cksum "$MARKER" "$PLANS_DIR/run-a/.state.json" "$STATE_DIR/.run-owner-a")"
+out="$(apsess other-session)"; rc=$?
+chk 'a foreign Proceed cannot release the gate' test "$rc" != 0
+chk 'the refused approval preserved the gate, state and claim' test "$before" = "$(cksum "$MARKER" "$PLANS_DIR/run-a/.state.json" "$STATE_DIR/.run-owner-a")"
+chk 'the refused approval prints no run directive' output_lacks 'Run the plan until its Goal check passes'
+
+echo
+echo '== Released plan basenames with spaces and Unicode =='
+clear_plans
+rm -f "$MARKER" "$MARKER_B" "$LEGACY_MARKER" "$STATE_DIR"/.run-*
+arm
+legacy_slug='plan résumé'
+mkdir -p "$PLANS_DIR/$legacy_slug"
+write_complete_plan "$PLANS_DIR/$legacy_slug/plan.md" 'Existing plan'
+touch -t 200001010000 "$MARKER"
+out="$(apsess existing-owner)"; rc=$?
+chk 'Proceed accepts an existing non-kebab slug' test "$rc" = 0
+chk 'Proceed releases the draft gate for the existing plan' test ! -f "$MARKER"
+chk 'Proceed approves the existing plan' test "$(sidecar "$legacy_slug" '.state')" = approved
+chk 'run marker preserves the exact existing slug' grep -Fqx "slug=$legacy_slug" "$STATE_DIR/.run-existing-owner"
+resume_legacy() {
+  (cd "$REPO" && CLAUDE_CODE_SESSION_ID="$1" HOME="$SANDBOX" bash "$PLANSTATE" begin-run "$legacy_slug") >/dev/null 2>&1
+}
+foreign_legacy() { ! resume_legacy "$1"; }
+chk 'native resume accepts the same existing basename' resume_legacy existing-owner
+chk 'existing basename receives the same exclusive claim protection' foreign_legacy second-session
+chk 'hookless resume also observes the foreign claim' foreign_legacy ''
+
 echo "RESULT: PASS=$PASS FAIL=$FAIL"
 [ "$FAIL" = "0" ]

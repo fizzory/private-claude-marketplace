@@ -45,6 +45,9 @@ Do these in order:
      waited out or removed by hand only with the user's explicit OK. Never delete a
      marker yourself.
    - **`also armed elsewhere:`** lines are informational — don't re-run, don't wait.
+   - **A live run owns the target or reserves this worktree.** Surface the owner.
+     Continue the draft in an independent worktree or return to the owning session.
+     A live transfer uses the explicit takeover in the Claude adapter.
    - **`ALREADY APPROVED: <slug>`** is not an error: that plan is already approved (or
      in progress) and this worktree may build it, so nothing was armed. Invoke
      `Skill({"skill": "mentor:planning"})` and go straight to its "After Proceed —

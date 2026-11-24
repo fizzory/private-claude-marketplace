@@ -18,11 +18,8 @@
 #     markers older than 24h are pruned. Kill switch: MENTOR_PLANNING_INTENT=off (env;
 #     also 0|false|no) or "planning_intent":"off" (.mentor/config.json).
 #
-#   • PLAN POINTER (v6.3.0). While this worktree has an armed draft or this session has a
-#     run, every prompt gets one line naming the plan's path, stored state, next step,
-#     and a drift notice when plan.md changed since mentor last wrote it. Empty prompts
-#     and slash commands still get it, so /compact and /mentor:plan retain the plan's
-#     location.
+#   • PLAN POINTER. Share the path and next action for an armed draft or owned run.
+#     The owner gets pointer changes only on repeated task notifications.
 #
 # Fail-soft everywhere: no jq / malformed input → exit 0. Each advisory is an
 # independent call; neither can fail the prompt or swallow the other. Never blocks.
@@ -34,8 +31,9 @@ HOOK_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "${HOOK_DIR}/lib/state.sh" 2>/dev/null || exit 0
 
 INPUT="$(cat)" || exit 0
-
-PROMPT="$(printf '%s' "$INPUT" | jq -r '.prompt // ""' 2>/dev/null)" || exit 0
+INPUT="$(mentor_context_event "$INPUT" UserPromptSubmit)" || exit 0
+PROMPT="$(printf '%s' "$INPUT" | jq -er '.prompt | strings')" || exit 0
+SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // ""')" || exit 0
 # Passthroughs skip the nudge, independently of the plan pointer.
 PASSTHROUGH=0
 case "$PROMPT" in ''|/*) PASSTHROUGH=1 ;; esac
@@ -47,8 +45,10 @@ case "$PROMPT" in ''|/*) PASSTHROUGH=1 ;; esac
 # bare tags are kept because they are the inner tags of the wrapper form and the shape
 # subagent threads already use — a harness change could hoist them to the front.
 SYNTHETIC=0
+TASK_NOTICE=0
 case "$PROMPT" in
-  '<agent-message'* | '<teammate-message'* | '<task-notification'*) SYNTHETIC=1 ;;
+  '<task-notification'*) SYNTHETIC=1; TASK_NOTICE=1 ;;
+  '<agent-message'* | '<teammate-message'*) SYNTHETIC=1 ;;
   # Inter-session / teammate reports arrive WRAPPED — the tag sits on line 2, so the
   # bare-tag arms above never fire for them. This is the dominant real shape.
   'Another Claude session sent a message:'*) SYNTHETIC=1 ;;
@@ -102,7 +102,6 @@ esac
 # Once-per-session only. Marker lives under a machine-global scratch dir — NEVER
 # inside the target repo's .mentor/ (see header). The base follows MENTOR_STATE_HOME,
 # else CLAUDE_CONFIG_DIR, else ~/.claude (mentor_host_state_base).
-SESSION_ID="$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null)" || true
 scratch_dir="$(mentor_host_state_base claude)/_prompt-nudges"
 marker="${scratch_dir}/.planning-intent-${SESSION_ID:-nosession}"
 [ -e "$marker" ] && return 0
@@ -118,17 +117,16 @@ return 0
 }
 
 # ---------------------------------------------------------------------------
-# The plan pointer has no dedup marker: every prompt while drafting/running needs
-# the path, including /compact. Read stored state; all steps ticked still leaves the
-# Goal check to grade before a run is finished.
+# Read stored state; an all-ticked run still owes the Goal check.
 mentor_plan_pointer() {
   local pp_gate pp_md="" pp_slug="" pp_stored
-  local pp_session pp_source pp_next pp_total pp_ticked pp_title pp_change=""
+  local pp_source pp_next pp_total pp_ticked pp_title pp_change="" pp_selected pp_owner line
   [ -n "$repo_root" ] && [ -d "$plans_dir" ] || return 0
   pp_gate="$(mentor_live_gate "$plans_dir" "$wt_id")"
 
-  pp_session="$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null)" || return 0
-  IFS=$'\t' read -r pp_source pp_md <<<"$(mentor_live_plan "$plans_dir" "$wt_id" "$pp_session" "$pp_gate")" || return 0
+  pp_selected="$(mentor_live_plan "$plans_dir" "$wt_id" "$SESSION_ID" "$pp_gate")" || return 0
+  IFS=$'\t' read -r pp_source pp_md pp_owner <<<"$pp_selected" || return 0
+  [ "$pp_source" != foreign ] || return 0
   if [ -z "$pp_md" ]; then
     if [ -n "$pp_gate" ]; then
       echo "mentor plan: no plan file yet · it is created at research start (planning Step 2)"
@@ -157,14 +155,31 @@ mentor_plan_pointer() {
   if [ "$(mentor_plan_drift "$pp_md")" = "changed" ]; then
     pp_change=" · plan.md changed since mentor last wrote it — read it before editing it further"
   fi
-  printf 'mentor plan: %s · .mentor/plans/%s/plan.md · %s · next: %s%s\n' \
-    "$pp_slug" "$pp_slug" "${pp_stored:-unknown}" "$pp_next" "$pp_change"
+  line="$(printf 'mentor plan: %s · .mentor/plans/%s/plan.md · %s · next: %s%s' \
+    "$pp_slug" "$pp_slug" "${pp_stored:-unknown}" "$pp_next" "$pp_change")"
+  if [ "$pp_source" = run ]; then
+    _mentor_run_locked pointer "${plans_dir%/*}" "$pp_slug" "$SESSION_ID" "$TASK_NOTICE" "$line"
+  else
+    printf '%s\n' "$line"
+  fi
   return 0
 }
 
 # Both advisories use the UserPromptSubmit stdout context channel, nudge first.
 # Each runs independently; neither can fail the prompt or swallow the other.
 mentor_planning_nudge 2>/dev/null || true
-mentor_plan_pointer 2>/dev/null || true
+mentor_prompt_locked() {
+  if [ -n "$SESSION_ID" ]; then
+    _mentor_run_locked wake "${plans_dir%/*}" "$SESSION_ID" prompt || return 0
+  fi
+  mentor_plan_pointer
+}
+if [ -d "$plans_dir" ]; then
+  if declare -F mentor_with_run_lock >/dev/null; then
+    mentor_with_run_lock "${plans_dir%/*}" mentor_prompt_locked 2>/dev/null || true
+  else
+    mentor_plan_pointer 2>/dev/null || true
+  fi
+fi
 
 exit 0

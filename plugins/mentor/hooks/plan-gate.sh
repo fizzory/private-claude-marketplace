@@ -51,19 +51,7 @@ case "$TOOL_NAME" in
 esac
 
 CWD="$(mentor_cwd "$INPUT")"
-CURRENT_SESSION="$(printf '%s' "$INPUT" | jq -r '.session_id // ""' 2>/dev/null)" || true
-
-# --- resolve the repo-scoped plans dir + both marker forms (v2.23.0) ---
-repo_root_common="$(mentor_repo_root "$CWD")"
-[ -z "$repo_root_common" ] && exit 0
-plans_dir="$(mentor_plans_dir "$repo_root_common")"
-wt_id="$(mentor_worktree_id "$CWD")"
-own_marker="$(mentor_plan_marker "$plans_dir" "$wt_id")"
-legacy_marker="${plans_dir}/.planning"
-# Empty wt_id (git failure, bare repo, a cwd under .git/, …): own_marker IS the bare
-# legacy path (mentor_plan_marker's one fallback site) — one physical file, not two.
-same_marker=0
-[ "$own_marker" = "$legacy_marker" ] && same_marker=1
+CURRENT_SESSION="$(printf '%s' "$INPUT" | jq -r '.session_id | strings' 2>/dev/null)" || true
 
 # Canonicalize without requiring the path to exist (new-file writes are the common
 # case). macOS BSD `realpath` lacks -m and fails on non-existent paths, so fall back
@@ -116,6 +104,37 @@ EOF
     exit 2
     ;;
 esac
+
+# Protect managed artifacts in the target's shared repo, independent of the
+# planning edit gate in the tool's cwd. This check admits a tool operation.
+case "$FILE_CANON" in
+  */.mentor/plans/*/*)
+    target_state="${FILE_CANON%%/.mentor/plans/*}/.mentor"
+    relative="${FILE_CANON#"$target_state/plans/"}"
+    target_slug="${relative%%/*}"
+    case "${relative#*/}" in
+      plan.md|verdicts/*|step-[0-9]*-verify.md|topic-[0-9]*-verify.md|goal-verify.md)
+        target_repo="$(mentor_repo_root "${target_state%/.mentor}")"
+        if [ "$target_state" = "$(mentor_state_dir "$target_repo")" ] &&
+          [ -d "$target_state/plans/$target_slug" ] &&
+          declare -F mentor_with_run_lock >/dev/null; then
+          mentor_with_run_lock "$target_state" mentor_run_guard_locked \
+            "$target_state" "$target_slug" "$CURRENT_SESSION" "" || exit 2
+        fi
+        ;;
+    esac
+    ;;
+esac
+
+# Resolve the existing worktree and legacy edit gates from the tool's cwd.
+repo_root_common="$(mentor_repo_root "$CWD")"
+[ -n "$repo_root_common" ] || exit 0
+plans_dir="$(mentor_plans_dir "$repo_root_common")"
+wt_id="$(mentor_worktree_id "$CWD")"
+own_marker="$(mentor_plan_marker "$plans_dir" "$wt_id")"
+legacy_marker="${plans_dir}/.planning"
+same_marker=0
+[ "$own_marker" = "$legacy_marker" ] && same_marker=1
 
 # Neither marker present → not planning → allow.
 [ -f "$own_marker" ] || [ -f "$legacy_marker" ] || exit 0

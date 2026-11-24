@@ -170,10 +170,10 @@ name, so an overnight task needed a human at each boundary. The run now ends onl
 terminal state. Three things keep that safe: the Always-pause list stops anything
 irreversible or outward-facing; an independent verifier grades every step so the builder
 cannot declare victory; and the decision log records every choice so the human reviews it
-afterwards instead of during. The re-plan limits (one per step, three per run) and the Stop
-hook's idle cap exist so a dead end ends as `failed` with a report rather than an endless
-loop — v2.37's hand-rolled re-poll ladder is the failure mode this design avoids by using
-the host's own Stop hook instead.
+afterwards instead of during. The re-plan limits (one per step, three per run) bound attempted
+fixes. The Stop hook allows background waits and uses one prompt for the same stalled
+plan or verdict content. This keeps native continuation from repeatedly waking the model
+while a job is pending or the run cannot make progress.
 
 ## Retracting an approval — why each of the three steps is required
 

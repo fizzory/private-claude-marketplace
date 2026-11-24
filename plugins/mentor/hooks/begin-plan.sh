@@ -76,6 +76,13 @@ wt_id="$(mentor_worktree_id "$(pwd)")"
 marker="$(mentor_plan_marker "$plans_dir" "$wt_id")"
 legacy_marker="$(mentor_plan_marker "$plans_dir" "")"
 toplevel="$(git -C "$(pwd)" rev-parse --show-toplevel 2>/dev/null || true)"
+state_dir="$(mentor_state_dir "$repo_root")"
+this_session="${CLAUDE_CODE_SESSION_ID:-nosession}"
+
+begin_locked() {
+  if [ -n "$target_slug" ]; then
+    mentor_run_guard_locked "$state_dir" "$target_slug" "$this_session" "$wt_id" || exit 1
+  fi
 
 # --- already-approved short-circuit -----------------------------------------
 # See the header: an approved/in-progress plan owned here (or unowned) needs no
@@ -93,7 +100,9 @@ target_owner=""
 if [ -n "$target_slug" ] && [ -d "${plans_dir}/${target_slug}" ]; then
   target_dir="${plans_dir}/${target_slug}"
   target_owner="$(mentor_plan_owner "$target_dir")"
-  if [ -z "$target_owner" ] || [ "$target_owner" = "$wt_id" ]; then
+  own_claim="$(mentor_run_inspect "$state_dir" | jq -r --arg slug "$target_slug" --arg sid "$this_session" \
+    'any(.[]; .live and .slug == $slug and .session == $sid)')" || exit 1
+  if [ -z "$target_owner" ] || [ "$target_owner" = "$wt_id" ] || [ "$own_claim" = true ]; then
     case "$(mentor_plan_state_stored "$target_dir"):$(mentor_plan_effective_state "$target_dir")" in
       approved:approved|approved:in_progress|in_progress:*)
         msg="ALREADY APPROVED: ${target_slug} — not arming the gate; follow skills/planning/SKILL.md → After Proceed. To re-plan instead: plan-state.sh set ${target_slug} draft, then re-run."
@@ -105,6 +114,10 @@ if [ -n "$target_slug" ] && [ -d "${plans_dir}/${target_slug}" ]; then
     esac
   fi
 fi
+
+# An approved owner can reattach above. A NEW gate in a running worktree would
+# block its owner's source edits, including if the same session tried to arm it.
+mentor_run_guard_locked "$state_dir" "" "" "$wt_id" admit || exit 1
 
 # --- legacy-marker guard (v2.23.0) ------------------------------------------
 # A bare `.planning` (no worktree suffix) is a pre-upgrade repo-global marker,
@@ -155,7 +168,6 @@ fi
 # branch over another worktree's live session; only two sessions sharing the
 # SAME worktree (or the empty-wt_id case, where "own marker" IS the legacy
 # marker) still serialize here.
-this_session="${CLAUDE_CODE_SESSION_ID:-nosession}"
 if [ -f "$marker" ] && ! mentor_marker_stale "$marker"; then
   other_session="$(mentor_marker_field "$marker" session)"
   if [ -n "$other_session" ] && [ "$other_session" != "$this_session" ]; then
@@ -294,3 +306,6 @@ while IFS= read -r lm; do
 done < <(mentor_live_markers "$plans_dir")
 
 exit 0
+}
+
+mentor_with_run_lock "$state_dir" begin_locked

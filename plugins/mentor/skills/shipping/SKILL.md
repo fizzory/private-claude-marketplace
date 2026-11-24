@@ -196,10 +196,9 @@ being made, and only the user knows whether it belongs in this ship.
 
 Invoke `Skill(skill="simplify")` **in this thread** (a Claude Code built-in; if
 unavailable, do a quick review of the branch diff yourself instead). It fans out its own
-review agents: while they run, do not wait on them by hand — end the turn and let the
-harness re-invoke you when they report. Inside a plan run, follow planning → **Wait for
-delegates**; ending the turn applies only to standalone shipping. A `Bash true` poll
-burns a whole turn and returns nothing.
+review agents. While they run, standalone shipping ends the turn and lets the harness
+re-invoke you when they report. Inside a plan run, follow planning → **Wait for
+delegates**. A `Bash true` poll burns a whole turn and returns nothing.
 
 That fallback is for simplify being **unavailable**, not for skipping it. If a standing
 instruction in this environment seems to block simplify's own review agents, ask the user

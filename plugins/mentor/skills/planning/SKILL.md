@@ -121,12 +121,13 @@ Goal check passes** (`{#implement}`) for that slug — re-planning an approved p
 only re-ask a question the user already answered. Two checks first: a `note` saying it
 was **not individually reviewed** (a plan swept in by a release) means nobody approved
 it on its own — confirm with the user before building it; a `note` starting `paused:`
-means the run stopped on that decision-log row — ask its question first, write the
-`resumed` row, then continue. A resumed run has no run marker unless
-`plan-state.sh begin-run <slug>` runs for this session (Proceed runs it through
-`approve-plan.sh`; a retrospective resume runs it per its playbook), so an ordinary
-resume is not held by the Stop hook: keep working until a terminal state per
-**Hosts without a Stop hook or subagents**. To re-plan instead, run
+means the run stopped on that decision-log row — resolve its question first.
+Before writing a resumed row, dispatching work, or editing its plan or verdicts,
+acquire it with `plan-state.sh begin-run <slug>` when helpers are available.
+If the claim is refused, surface the owning session and stop working on that run.
+See the [Claude adapter](../../adapters/claude/README.md#shared-run-contract) for
+explicit transfers and wait declarations. Follow
+the durable-artifact fallback on hosts without helpers. To re-plan instead, run
 `plan-state.sh set <slug> draft`, then plan it again (`/mentor:plan <slug>` in Claude Code).
 
 On resume, load `references/principles.md` once per context (re-read after compaction)
@@ -849,13 +850,12 @@ On **Proceed**, run:
 bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/approve-plan.sh"
 ```
 
-It validates the plan (a non-empty `.md` newer than the marker it resolves — this
-worktree's `.planning.<wt-id>`, or the legacy repo-global `.planning` when running
-in legacy_mode), deletes that marker — the gate OPENS for this worktree — and writes
-the session's **run marker** `.mentor/.run-<session_id>` (`slug=` + `started=`), which
-the `plan-continue.sh` Stop hook reads to keep the run going. On failure it prints the
-problem, keeps the gate closed, and exits non-zero: fix the plan (revise it per Step 4)
-and re-ask. On success, run the plan per **After Proceed** below.
+It validates the fresh plan against the worktree or legacy gate, reserves the run
+for the originating session, persists approval, and releases the edit gate.
+The Stop hook reads that session's run marker. If validation or reservation fails,
+the helper leaves the gate closed and reports the reason. Revise and re-ask for
+plan validation failures. When another session owns the run, leave it with that
+session. On success run the plan per **After Proceed** below.
 
 On **Deliver plan only**, run:
 
@@ -921,9 +921,12 @@ stateDiagram-v2
 | failed | `set <slug> failed --note "<what broke>"` | removed |
 | done | `set <slug> implemented` — only after the Goal-check PASS, the Done review, and delivery | removed |
 
-Remove the marker with `rm -f "$mentor_dir/.run-<session_id>"`. While the plan's stored
-state is `in_progress` and the marker exists, the Stop hook blocks a premature stop
-and names the next step; `paused`, `failed`, and `done` all let the session end.
+The state helper closes the claim and its companions on a final transition.
+While the owned run is `in_progress`, a Stop hook may name the next action once
+per unchanged stall. Before yielding for a background delegate, use the host's
+in-flight task signal or declare the wait through the adapter. When a job cannot
+wake the session, hold the turn with a bounded foreground wait. If a partial
+completion leaves another job pending, declare that wait before yielding again.
 
 ```bash
 bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" set <slug> in_progress            # run starts / resumes
@@ -934,12 +937,12 @@ bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" set <slug> impl
 bash "${PLUGIN_ROOT:-${CLAUDE_PLUGIN_ROOT}}/hooks/plan-state.sh" set <slug> failed --note "<what broke>"
 ```
 
-**Wait for delegates.** When every next action depends on background delegates, hold
-the turn with one bounded blocking call — the host's monitor or task-wait tool, or the
-delegate tool's own bounded wait — and repeat that call until the result lands. Follow
-merging → **Step 2 — One bounded watch**'s ban on background sleeps and poll loops.
-Keep the turn active so the run continues without depending on a host's stop/resume
-behavior.
+**Wait for delegates.** When every next action depends on background delegates, use
+the Claude continuation guidance above if completion can wake the owning session
+through a native or declared wait. Otherwise hold the turn with one bounded blocking
+call from the host's monitor or task-wait tool or the delegate tool. Repeat that call
+until the result lands. Apply the bounded-wait rules in merging → **Step 2 — One
+bounded watch**.
 
 **Keep a step's own body on `-` bullets.** The step counter cannot tell a numbered
 sub-item from a step, and an inflated denominator strands a finished plan at
@@ -1010,7 +1013,7 @@ drafts, feedback, and tracked writes**).
    review in `plan.md`; otherwise follow that playbook's Deliver mode.
    For a released plan with no recorded owner, use its selected playbook's Deliver
    mode, or the general flow for `none`, so its approved delivery still works.
-8. `set <slug> implemented`, remove the run marker, and report the verdict line below.
+8. `set <slug> implemented` closes the run. Report the verdict line below.
    After reporting, offer
    a retrospective in one line (`/mentor:retro` in Claude Code; on other hosts, ask for a
    retrospective of this session) to turn this session's lessons into skills — a
@@ -1053,7 +1056,7 @@ every PASS row.
 
 #### The Done review {#done-review}
 
-Every terminal transition — `done`, `paused`, `failed`, and the Stop hook's idle cap —
+Every terminal transition — `done`, `paused`, and `failed` —
 writes `## Done review` into `plan.md` (and into whatever a playbook's deliver mode hands
 over); chat reports it with the verdict line above. Three parts, organised by the plan's use
 case scenarios:

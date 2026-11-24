@@ -35,7 +35,8 @@ MARKER="$PLAN_DIR/.plan.md.opened"
 trap 'rm -rf "$ROOT"' EXIT   # .mentor/ lives inside $ROOT, so this cleans everything
 
 PASS=0; FAIL=0
-mkjson() { python3 -c 'import json,sys;print(json.dumps({"tool_name":sys.argv[2],"tool_input":{"file_path":sys.argv[1]}}))' "$1" "${2:-Write}"; }
+mkjson() { jq -nc --arg path "$1" --arg tool "${2:-Write}" --arg sid "${TEST_PLAN_SESSION:-}" \
+  '{tool_name:$tool, session_id:$sid, tool_input:{file_path:$path}}'; }
 
 # Base runner: clears any inherited VSCode signals, enables the dry-run seam, applies per-case
 # env assignments ("$@"), and returns the hook's stdout (the selected opener name, or empty).
@@ -152,6 +153,15 @@ got="$(run "$PLAN")"
 chk "first model Write still opens the plan" test "$got" = vscode
 chk "first model Write with opening enabled → known" test "$(drift)" = known
 rm -f "$MARKER"
+
+echo "== H. PostToolUse records the payload owner's hash =="
+printf '{"state":"in_progress"}\n' > "$PLAN_DIR/.state.json"
+printf 'slug=sample-plan\nstarted=fixture\n' > "$repo_root/.mentor/.run-real-owner"
+got="$(TEST_PLAN_SESSION=real-owner run "$PLAN" MENTOR_PLAN_OPEN=off CLAUDE_CODE_SESSION_ID=wrong-env)"
+chk "payload owner records the current hash" test "$(drift)" = known
+printf 'A write admitted before takeover may finish later.\n' >> "$PLAN"
+got="$(TEST_PLAN_SESSION=old-owner run "$PLAN" MENTOR_PLAN_OPEN=off CLAUDE_CODE_SESSION_ID=real-owner)"
+chk "late foreign PostToolUse cannot attribute an admitted edit to the owner" test "$(drift)" = changed
 
 echo
 echo "RESULT: PASS=$PASS FAIL=$FAIL"

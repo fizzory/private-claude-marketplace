@@ -121,17 +121,17 @@ chk "run + matching opener → exit 0, silent stderr" test "$RC:$ERR" = "0:"
 run_both "help me plan the next phase" b2
 chk "second matching prompt → pointer only"    test "$OUT" = "$BOTH_POINTER"
 rm -rf "$NUDGE_HOME"; mkdir -p "$NUDGE_HOME"
-printf 'slug=both-run\n' > "$STATE/.run-b3"
+mv "$STATE/.run-b2" "$STATE/.run-b3"
 run_both "help me plan the next phase" b3 MENTOR_PLANNING_INTENT=off
 chk "MENTOR_PLANNING_INTENT=off → pointer only" test "$OUT" = "$BOTH_POINTER"
-printf 'slug=both-run\n' > "$STATE/.run-b4"
+mv "$STATE/.run-b3" "$STATE/.run-b4"
 run_both "Another Claude session sent a message: help me plan X" b4
 chk "synthetic prompt → pointer only"          test "$OUT" = "$BOTH_POINTER"
 chk "synthetic prompt → burns no nudge marker" test ! -e "$NUDGE_HOME/.claude/mentor/_prompt-nudges/.planning-intent-b4"
-printf 'slug=both-run\n' > "$STATE/.run-b6"
+mv "$STATE/.run-b4" "$STATE/.run-b6"
 run_both "/mentor:plan help me plan X" b6
 chk "slash command → pointer only"             test "$OUT" = "$BOTH_POINTER"
-printf 'slug=both-run\n' > "$STATE/.run-b7"
+mv "$STATE/.run-b6" "$STATE/.run-b7"
 run_both "quick one: help me plan X" b7
 chk "opener mid-sentence (not anchored) → pointer only" test "$OUT" = "$BOTH_POINTER"
 rm -rf "$STATE"
@@ -245,14 +245,19 @@ jq '.state="in_progress"' "$PLANS/active-run/.state.json" > "$ROOT/sidecar.tmp"
 mv "$ROOT/sidecar.tmp" "$PLANS/active-run/.state.json"
 
 run "continue" pointer-other
-chk "no gate, no marker for this session → owned in_progress recovery pointer" test "$OUT" = "$RUN_POINTER"
+chk "fresh foreign run → no pointer" test -z "$OUT$ERR"
+touch -t 200001010000 "$STATE/.run-pointer-run"
+run "continue" pointer-other
+chk "expired foreign claim → unclaimed recovery pointer" test "$OUT" = "$RUN_POINTER"
+rm -f "$STATE/.run-pointer-run"
 printf 'slug=active-run\n' > "$STATE/.run-pointer-other"
 run "continue" pointer-other
 chk "exact-session marker → the same pointer" test "$OUT" = "$RUN_POINTER"
 rm -f "$STATE/.run-pointer-other"
+printf 'slug=active-run\n' > "$STATE/.run-pointer-run"
 
 printf '%s\n' "$RUN_BODY" | sed 's/2\. Second/2. Second ✅/' > "$PLANS/active-run/plan.md"
-pointer_baseline active-run
+CLAUDE_CODE_SESSION_ID=pointer-run pointer_baseline active-run
 run "continue" pointer-run
 chk "all steps ticked → stored in_progress and next: goal check" \
   test "$OUT" = "mentor plan: active-run · .mentor/plans/active-run/plan.md · in_progress · next: goal check"

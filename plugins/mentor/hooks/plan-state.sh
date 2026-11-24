@@ -207,7 +207,9 @@ Usage: plan-state.sh <subcommand>
   start <slug> [any init flag]          ensure-dir + init in ONE call; echoes the plan.md
                                          path. The plan-write path — replaces the two-call
                                          sequence and its re-derive footguns
-  begin-run <slug>                      start native continuation for this explicit plan
+  begin-run <slug> [--takeover]         claim this plan; explicit recovery/transfer with --takeover
+  wait <slug> --for <label> [--ttl-min N]
+                                         declare a background wait for the owning session
   set <slug> <state> [--note "…"]       state: draft|approved|in_progress|implemented|failed|superseded
   set-deps <slug> a,b                   replace deps wholesale (cycle-checked, fail-soft)
   tick <slug> <N>                       append ✅ to step N in plan.md (idempotent, fails loud)
@@ -254,6 +256,9 @@ Usage: plan-state.sh <subcommand>
 EOF
 }
 
+# The dispatcher is also called in subshells by start, sharing its one local
+# transaction instead of launching child CLIs that contend with their parent.
+mentor_plan_state_dispatch() {
 sub="${1:-}"
 [ "$#" -gt 0 ] && shift
 
@@ -315,9 +320,19 @@ if [ "$sub" = "ensure-dir" ]; then
     ed_wt_id="$(mentor_worktree_id "$(pwd)")"
     warn_same_slug_collision "$ed_canon" "$ed_wt_id" "$ed_plans"
   fi
+  ed_slug=""
+  case "$ed_canon" in
+    "$ed_plans"/*) ed_slug="${ed_canon#"$ed_plans"/}"; ed_slug="${ed_slug%%/*}" ;;
+  esac
+  # Parent/review directories are also mutations: protect worktree admission even
+  # when no particular plan slug is encoded in the path.
+  mentor_run_guard_locked "$ed_mdir" "$ed_slug" "${CLAUDE_CODE_SESSION_ID:-}" "$(mentor_worktree_id "$PWD")" admit || exit 1
   mentor_ensure_private_dir "$ed_mdir" "$ed_canon"
   if [ -n "$ed_wt_id" ]; then
     mentor_plan_state_write "$ed_canon" --owner "$ed_wt_id" --owner-session "${CLAUDE_CODE_SESSION_ID:-}"
+  fi
+  if [ -n "$ed_slug" ]; then
+    mentor_run_activity_locked "$ed_mdir" "$ed_slug" "${CLAUDE_CODE_SESSION_ID:-}" || exit 1
   fi
   echo "$ed_canon"
   exit 0
@@ -375,6 +390,7 @@ if [ "$sub" = "relocate" ]; then
     echo "[mentor plan-state] relocate: source and destination are the same directory — nothing to do." >&2
     exit 1
   fi
+  mentor_run_guard_locked "$rl_mdir" "$rl_slug" "${CLAUDE_CODE_SESSION_ID:-}" "$(mentor_worktree_id "$PWD")" admit || exit 1
   if [ -e "$rl_dst" ]; then
     echo "[mentor plan-state] relocate refuses — ${rl_dst} already exists. Pick a different slug in the destination, or remove/merge it by hand first." >&2
     exit 1
@@ -620,13 +636,12 @@ if [ "$sub" = "start" ]; then
     exit 1
   fi
   st_plans="$(mentor_plans_dir "$st_repo")"
-  st_self="${hook_dir}/plan-state.sh"
-  st_dir="$(bash "$st_self" ensure-dir "${st_plans}/${st_slug}")" || exit 1
+  st_dir="$(mentor_plan_state_dispatch ensure-dir "${st_plans}/${st_slug}")" || exit 1
   # init reports to STDERR here, so this subcommand's stdout is exactly one line: the
   # plan path. That is what lets the caller write
   # `plan_md="$(plan-state.sh start "$slug")"` and have a failure kill the pipeline.
   # The summary is not suppressed, only redirected: it still appears for the reader.
-  bash "$st_self" init "$st_slug" "$@" >&2 || exit 1
+  (mentor_plan_state_dispatch init "$st_slug" "$@") >&2 || exit 1
   echo "${st_dir}/plan.md"
   exit 0
 fi
@@ -635,7 +650,7 @@ fi
 # gate, sweep, start) exits before reaching here, so none of them appears in this
 # allow-list — adding one would be unreachable code, not a fix.
 case "$sub" in
-  init|set|set-deps|tick|record-write|drift|verify|query|list|current|begin-run) ;;
+  init|set|set-deps|tick|record-write|drift|verify|query|list|current|begin-run|wait) ;;
   claim|brief|policy|set-parent|set-priority|set-category|handoff-path|handoff-selfcheck)
     echo "plan-state.sh: '${sub}' was removed in mentor v5.0.0 — no replacement" >&2
     exit 1
@@ -657,14 +672,14 @@ repo_root="$(mentor_repo_root "$(pwd)")"
 if [ -z "$repo_root" ]; then
   [ "$sub" != drift ] || { echo unknown; exit 0; }
   echo "[mentor plan-state] Not in a git repo — mentor keeps no plan registry here." >&2
-  case "$sub" in record-write|begin-run) exit 1 ;; esac
+  case "$sub" in record-write|begin-run|wait) exit 1 ;; esac
   exit 0
 fi
 plans_dir="$(mentor_plans_dir "$repo_root")"
 if [ ! -d "$plans_dir" ]; then
   [ "$sub" != drift ] || { echo unknown; exit 0; }
   echo "[mentor plan-state] No plans dir yet (${plans_dir}) — nothing planned in this repo." >&2
-  case "$sub" in record-write|begin-run) exit 1 ;; esac
+  case "$sub" in record-write|begin-run|wait) exit 1 ;; esac
   exit 0
 fi
 
@@ -754,6 +769,10 @@ require_slug() {
     usage >&2
     exit 1
   fi
+  case "$slug" in
+    .|..|*/*)
+      echo "[mentor plan-state] ${sub}: invalid slug." >&2; exit 1 ;;
+  esac
   if [ ! -d "${plans_dir}/${slug}" ]; then
     echo "[mentor plan-state] No such plan: ${plans_dir}/${slug}" >&2
     echo "Run 'plan-state.sh list' to see the slugs that exist." >&2
@@ -993,22 +1012,41 @@ def csv: split(",") | map(select(length > 0));
 
 case "$sub" in
 
+  wait)
+    if [ "$#" -ne 3 ] && [ "$#" -ne 5 ]; then
+      echo '[mentor plan-state] wait requires <slug> --for <label> [--ttl-min N].' >&2
+      exit 1
+    fi
+    slug="$1"; ttl=""
+    require_slug "$slug"
+    if [ "$2" != --for ] || { [ "$#" -eq 5 ] && [ "$4" != --ttl-min ]; }; then
+      echo '[mentor plan-state] wait requires <slug> --for <label> [--ttl-min N].' >&2
+      exit 1
+    fi
+    if [ "$#" -eq 5 ]; then
+      ttl="$5"
+      case "$ttl" in ''|*[!0-9]*) echo '[mentor plan-state] TTL must be measured in whole minutes.' >&2; exit 1 ;; esac
+    fi
+    _mentor_run_locked wait "${plans_dir%/plans}" "$slug" "${CLAUDE_CODE_SESSION_ID:-}" "$3" "$ttl" || exit 1
+    ;;
+
   begin-run)
-    if [ "$#" -ne 1 ]; then
-      echo "[mentor plan-state] begin-run requires exactly one <slug>." >&2
+    if [ "$#" -lt 1 ] || [ "$#" -gt 2 ] || { [ "$#" -eq 2 ] && [ "$2" != --takeover ]; }; then
+      echo "[mentor plan-state] begin-run requires <slug> [--takeover]." >&2
       exit 1
     fi
     slug="$1"
-    case "$slug" in
-      ""|.|..|*/*|*[!a-zA-Z0-9._-]*)
-        echo "[mentor plan-state] begin-run: invalid slug." >&2; exit 1 ;;
-    esac
     require_slug "$slug"
     if [ ! -f "${plans_dir}/${slug}/plan.md" ]; then
       echo "[mentor plan-state] begin-run: plan.md is missing for ${slug}." >&2
       exit 1
     fi
-    mentor_begin_run "$repo_root" "$slug"
+    shift
+    mentor_run_claim_locked "${plans_dir%/plans}" "$slug" "${CLAUDE_CODE_SESSION_ID:-}" "$(mentor_worktree_id "$PWD")" "$@" || exit 1
+    case "${CLAUDE_CODE_SESSION_ID:-}" in
+      ''|nosession) ;;
+      *) echo "  run: marker written — the Stop hook keeps this session going while ${slug} is in_progress" ;;
+    esac
     ;;
 
   init)
@@ -1017,6 +1055,7 @@ case "$sub" in
     require_jq
     plan_dir="${plans_dir}/${slug}"
     init_wt_id="$(mentor_worktree_id "$(pwd)")"
+    mentor_run_guard_locked "${plans_dir%/plans}" "$slug" "${CLAUDE_CODE_SESSION_ID:-}" "$init_wt_id" admit || exit 1
     # Collision check reads whatever owner is currently on record, BEFORE the
     # last-init-wins re-stamp below overwrites it.
     warn_same_slug_collision "$plan_dir" "$init_wt_id" "$plans_dir"
@@ -1077,6 +1116,7 @@ case "$sub" in
     fi
     require_jq
     plan_dir="${plans_dir}/${slug}"
+    mentor_run_guard_locked "${plans_dir%/plans}" "$slug" "${CLAUDE_CODE_SESSION_ID:-}" "$(mentor_worktree_id "$PWD")" || exit 1
     before="$(mentor_plan_effective_state "$plan_dir")"
     # Freshness for the reminders below is judged off this STORED read, not `before`
     # above — `before` is effective (max of stored, tick-derived) and self-heals to
@@ -1086,6 +1126,11 @@ case "$sub" in
     # write actually persists it, so ticks alone can't fool it.
     before_stored="$(mentor_plan_state_stored "$plan_dir")"
     mentor_plan_state_write "$plan_dir" --state "$state" --note "$note"
+    # Stored terminal transitions close the run; tick-inferred closure never does.
+    # A paused approved run retains its marker and all but its background wait.
+    if [ "$(mentor_plan_state_stored "$plan_dir")" = "$state" ]; then
+      mentor_run_finish_locked "${plans_dir%/plans}" "$slug" "${CLAUDE_CODE_SESSION_ID:-}" || exit 1
+    fi
     after="$(mentor_plan_effective_state "$plan_dir")"
     echo "[mentor plan-state] ${slug}: ${before} → ${after}${note:+  (${note})}"
     # The effective read can outrank what was just stored — say so rather than let a
@@ -1119,6 +1164,7 @@ case "$sub" in
     require_slug "$slug"
     require_jq
     plan_dir="${plans_dir}/${slug}"
+    mentor_run_guard_locked "${plans_dir%/plans}" "$slug" "${CLAUDE_CODE_SESSION_ID:-}" "$(mentor_worktree_id "$PWD")" || exit 1
     clean_deps=()
     IFS=',' read -r -a raw_deps <<<"$depstr"
     for x in "${raw_deps[@]:-}"; do
@@ -1154,6 +1200,7 @@ case "$sub" in
         echo "[mentor plan-state] record-write: no plan.md at ${plan_md}." >&2
         exit 1
       fi
+      mentor_run_guard_locked "${plans_dir%/plans}" "$slug" "${CLAUDE_CODE_SESSION_ID:-}" "$(mentor_worktree_id "$PWD")" || exit 1
       record_plan_write "$plan_md"
     fi
     ;;
@@ -1180,6 +1227,7 @@ case "$sub" in
       echo "[mentor plan-state] tick: no plan.md at ${plan_md}." >&2
       exit 1
     fi
+    mentor_run_guard_locked "${plans_dir%/plans}" "$slug" "${CLAUDE_CODE_SESSION_ID:-}" "$(mentor_worktree_id "$PWD")" || exit 1
     if [ "$(mentor_plan_drift "$plan_md")" = changed ]; then
       echo "plan.md changed since mentor last wrote it — read it before editing it further"
     fi
@@ -1618,4 +1666,32 @@ case "$sub" in
 
 esac
 
+case "$sub" in
+  init|set|set-deps|tick|record-write)
+    mentor_run_activity_locked "${plans_dir%/plans}" "$slug" "${CLAUDE_CODE_SESSION_ID:-}" || exit 1
+    ;;
+esac
 exit 0
+
+}
+
+# All managed writes share the repository's existing .mentor directory lock.
+# Readers never need Python/fcntl or a lock. Missing registries keep their released
+# diagnostics (and avoid creating .mentor on a query or invalid begin-run).
+case "${1:-}" in
+  ensure-dir|relocate|start|init|set|set-deps|tick|record-write|begin-run|wait)
+    lock_repo="$(mentor_repo_root "$PWD")"
+    if [ -n "$lock_repo" ]; then lock_dir="$(mentor_state_dir "$lock_repo")"
+    else lock_dir="$(mentor_no_repo_state_dir)"; fi
+    case "${1:-}" in
+      ensure-dir|relocate|start) ;;
+      *) [ -d "$lock_dir/plans" ] || { mentor_plan_state_dispatch "$@"; exit $?; } ;;
+    esac
+    if ! declare -F mentor_with_run_lock >/dev/null; then
+      echo '[mentor plan-state] Run helper unavailable; use the durable plan fallback.' >&2
+      exit 1
+    fi
+    mentor_with_run_lock "$lock_dir" mentor_plan_state_dispatch "$@"
+    ;;
+  *) mentor_plan_state_dispatch "$@" ;;
+esac
